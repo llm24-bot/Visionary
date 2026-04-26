@@ -151,7 +151,14 @@ function attachEventListeners() {
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'n' && document.activeElement !== taskInput && document.activeElement !== reflectNote) {
+    // Don't fire shortcuts while typing in any input/textarea
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+    // Don't fire if auth screen is showing
+    if (document.getElementById('auth-screen')?.style.display !== 'none') return;
+
+    if (e.key === 'n') {
       e.preventDefault();
       taskInput.focus();
     }
