@@ -980,3 +980,19 @@ footer {
   color: var(--text-dim);
   text-decoration: underline;
 }
+
+/* Ensure auth interactivity always works */
+.auth-screen,
+.auth-screen * {
+  pointer-events: auto;
+}
+
+.auth-screen .bg-blobs,
+.auth-screen .blob {
+  pointer-events: none;
+}
+
+.auth-card {
+  position: relative;
+  z-index: 10;
+}
