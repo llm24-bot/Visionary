@@ -97,6 +97,13 @@ function attachEventListeners() {
   taskInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') handleAdd();
   });
+  // Logout button
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+      if (confirm('Log out?')) logout();
+    });
+  }
 
   // Custom dropdown
   selectTrigger.addEventListener('click', (e) => {
