@@ -1,24 +1,27 @@
 // ============================================
-// VISIONARY v3 — Reflection, Analytics, Theme
+// VISIONARY — Cloud-synced (Supabase)
 // ============================================
 
 // --- State ---
 const state = {
-  tasks: JSON.parse(localStorage.getItem('v-tasks')) || [],
-  streak: parseInt(localStorage.getItem('v-streak')) || 0,
-  longestStreak: parseInt(localStorage.getItem('v-longest-streak')) || 0,
-  lastCompleteDate: localStorage.getItem('v-last-date') || null,
-  history: JSON.parse(localStorage.getItem('v-history')) || [],
+  tasks: [],
+  streak: 0,
+  longestStreak: 0,
+  lastCompleteDate: null,
+  history: [],
   theme: localStorage.getItem('v-theme') || 'dark',
   selectedCategory: 'focus',
   currentView: 'today',
   analyticsPeriod: 7,
+  currentUser: null,
+  viewingDate: null,
 };
+
+const todayDate = () => new Date().toDateString();
 
 // --- DOM refs ---
 const $ = (id) => document.getElementById(id);
 
-// Today view
 const taskInput = $('task-input');
 const categorySelect = $('category-select');
 const selectTrigger = $('select-trigger');
@@ -36,12 +39,10 @@ const timelineContainer = $('timeline-container');
 const dateDisplay = $('date-display');
 const nowTime = $('now-time');
 
-// Nav
 const themeToggle = $('theme-toggle');
 const themeIcon = $('theme-icon');
 const reflectBtn = $('reflect-btn');
 
-// Reflection modal
 const reflectModal = $('reflect-modal');
 const reflectClose = $('reflect-close');
 const reflectDone = $('reflect-done');
@@ -54,7 +55,6 @@ const focusVal = $('focus-val');
 const reflectNote = $('reflect-note');
 const reflectSave = $('reflect-save');
 
-// Charts
 let chartCompletion = null;
 let chartCategory = null;
 let chartEnergy = null;
@@ -62,15 +62,101 @@ let chartEnergy = null;
 // --- Init ---
 init();
 
-function init() {
+async function init() {
   applyTheme(state.theme);
   renderDate();
+  attachEventListeners();
+  setInterval(() => { renderTimeline(); renderDate(); }, 60 * 1000);
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    state.currentUser = session.user;
+    await loadAllData();
+  }
+
   renderTimeline();
   renderTasks();
   renderStats();
-  attachEventListeners();
-  checkForNewDay();
-  setInterval(() => { renderTimeline(); renderDate(); }, 60 * 1000);
+}
+
+// Re-init when auth changes
+supabaseClient?.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_IN') {
+    state.currentUser = session.user;
+    await loadAllData();
+    renderTimeline();
+    renderTasks();
+    renderStats();
+  } else if (event === 'SIGNED_OUT') {
+    state.tasks = [];
+    state.history = [];
+    state.streak = 0;
+    state.longestStreak = 0;
+    state.currentUser = null;
+  }
+});
+
+// --- Data loading ---
+async function loadAllData() {
+  await Promise.all([
+    loadTasks(),
+    loadProfile(),
+    loadHistory(),
+  ]);
+}
+
+async function loadTasks() {
+  const { data, error } = await supabaseClient
+    .from('tasks')
+    .select('*')
+    .eq('user_id', state.currentUser.id)
+    .eq('date', todayDate())
+    .order('created_at', { ascending: true });
+
+  if (error) { console.error('Failed to load tasks:', error); return; }
+
+  state.tasks = (data || []).map(t => ({
+    id: t.id,
+    text: t.text,
+    category: t.category,
+    completed: t.completed,
+    scheduledHour: t.scheduled_hour,
+    createdAt: new Date(t.created_at).getTime(),
+    completedAt: t.completed_at ? new Date(t.completed_at).getTime() : null,
+  }));
+}
+
+async function loadProfile() {
+  const { data, error } = await supabaseClient
+    .from('profiles')
+    .select('*')
+    .eq('id', state.currentUser.id)
+    .single();
+  if (error) { console.error('Failed to load profile:', error); return; }
+  state.streak = data.streak || 0;
+  state.longestStreak = data.longest_streak || 0;
+  state.lastCompleteDate = data.last_complete_date;
+}
+
+async function loadHistory() {
+  const { data, error } = await supabaseClient
+    .from('reflections')
+    .select('*')
+    .eq('user_id', state.currentUser.id)
+    .order('date', { ascending: false });
+  if (error) { console.error('Failed to load history:', error); return; }
+
+  state.history = (data || []).map(h => ({
+    date: h.date,
+    timestamp: new Date(h.created_at).getTime(),
+    total: h.total,
+    completed: h.completed,
+    rate: h.rate,
+    energy: h.energy,
+    focus: h.focus,
+    note: h.note,
+    categories: h.categories,
+  }));
 }
 
 // --- Theme ---
@@ -79,25 +165,22 @@ function applyTheme(theme) {
   state.theme = theme;
   localStorage.setItem('v-theme', theme);
 
-  // Swap sun/moon icon
   if (theme === 'dark') {
     themeIcon.innerHTML = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>';
   } else {
     themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
   }
 
-  // Re-render charts with new theme colors
   if (state.currentView === 'analytics') renderAnalytics();
 }
 
 // --- Events ---
 function attachEventListeners() {
-  // Task input
   addBtn.addEventListener('click', handleAdd);
   taskInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') handleAdd();
   });
-  // Logout button
+
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
@@ -105,7 +188,6 @@ function attachEventListeners() {
     });
   }
 
-  // Custom dropdown
   selectTrigger.addEventListener('click', (e) => {
     e.stopPropagation();
     categorySelect.classList.toggle('open');
@@ -119,7 +201,6 @@ function attachEventListeners() {
   });
   document.addEventListener('click', () => categorySelect.classList.remove('open'));
 
-  // Nav
   document.querySelectorAll('.view-btn').forEach(btn => {
     btn.addEventListener('click', () => switchView(btn.dataset.view));
   });
@@ -130,7 +211,6 @@ function attachEventListeners() {
 
   reflectBtn.addEventListener('click', openReflection);
 
-  // Reflection modal
   reflectClose.addEventListener('click', closeReflection);
   reflectModal.addEventListener('click', (e) => {
     if (e.target === reflectModal) closeReflection();
@@ -139,7 +219,6 @@ function attachEventListeners() {
   focusSlider.addEventListener('input', () => focusVal.textContent = focusSlider.value);
   reflectSave.addEventListener('click', saveReflection);
 
-  // Analytics period
   document.querySelectorAll('.period-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
@@ -149,13 +228,9 @@ function attachEventListeners() {
     });
   });
 
-  // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
-    // Don't fire shortcuts while typing in any input/textarea
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-
-    // Don't fire if auth screen is showing
     if (document.getElementById('auth-screen')?.style.display !== 'none') return;
 
     if (e.key === 'n') {
@@ -187,99 +262,115 @@ function renderDate() {
   nowTime.textContent = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-// --- New day check: carry uncompleted tasks forward ---
-function checkForNewDay() {
-  const today = new Date().toDateString();
-  const lastSeen = localStorage.getItem('v-last-seen');
-  if (lastSeen && lastSeen !== today) {
-    // Different day — clear completed tasks, keep uncompleted
-    state.tasks = state.tasks.filter(t => !t.completed);
-    // Reset their scheduled hours (yesterday's schedule doesn't apply)
-    state.tasks.forEach(t => t.scheduledHour = null);
-    save();
-    renderTasks();
-    renderTimeline();
-  }
-  localStorage.setItem('v-last-seen', today);
-}
-
-// --- Task CRUD ---
-function handleAdd() {
+// --- Task CRUD (cloud) ---
+async function handleAdd() {
   const text = taskInput.value.trim();
-  if (!text) return;
+  if (!text || !state.currentUser) return;
+
+  const { data, error } = await supabaseClient
+    .from('tasks')
+    .insert({
+      user_id: state.currentUser.id,
+      text,
+      category: state.selectedCategory,
+      completed: false,
+      date: todayDate(),
+    })
+    .select()
+    .single();
+
+  if (error) { console.error('Add failed:', error); return; }
 
   state.tasks.push({
-    id: Date.now() + Math.random(),
-    text,
-    category: state.selectedCategory,
-    completed: false,
-    scheduledHour: null,
-    createdAt: Date.now(),
+    id: data.id,
+    text: data.text,
+    category: data.category,
+    completed: data.completed,
+    scheduledHour: data.scheduled_hour,
+    createdAt: new Date(data.created_at).getTime(),
   });
 
-  save();
   renderTasks();
   renderStats();
   taskInput.value = '';
   taskInput.focus();
 }
 
-function toggleTask(id) {
+async function toggleTask(id) {
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
-  task.completed = !task.completed;
-  if (task.completed) task.completedAt = Date.now();
-  save();
+
+  const newCompleted = !task.completed;
+  const { error } = await supabaseClient
+    .from('tasks')
+    .update({
+      completed: newCompleted,
+      completed_at: newCompleted ? new Date().toISOString() : null,
+    })
+    .eq('id', id);
+
+  if (error) { console.error('Toggle failed:', error); return; }
+
+  task.completed = newCompleted;
+  if (newCompleted) task.completedAt = Date.now();
   renderTasks();
   renderTimeline();
   renderStats();
   checkStreak();
 }
 
-function deleteTask(id) {
+async function deleteTask(id) {
+  const { error } = await supabaseClient.from('tasks').delete().eq('id', id);
+  if (error) { console.error('Delete failed:', error); return; }
   state.tasks = state.tasks.filter(t => t.id !== id);
-  save();
   renderTasks();
   renderTimeline();
   renderStats();
 }
 
-function scheduleTask(id, hour) {
+async function scheduleTask(id, hour) {
+  const { error } = await supabaseClient
+    .from('tasks')
+    .update({ scheduled_hour: hour })
+    .eq('id', id);
+  if (error) { console.error('Schedule failed:', error); return; }
   const task = state.tasks.find(t => t.id === id);
-  if (!task) return;
-  task.scheduledHour = hour;
-  save();
+  if (task) task.scheduledHour = hour;
   renderTimeline();
   renderTasks();
 }
 
-function unscheduleTask(id) {
+async function unscheduleTask(id) {
+  const { error } = await supabaseClient
+    .from('tasks')
+    .update({ scheduled_hour: null })
+    .eq('id', id);
+  if (error) { console.error('Unschedule failed:', error); return; }
   const task = state.tasks.find(t => t.id === id);
-  if (!task) return;
-  task.scheduledHour = null;
-  save();
+  if (task) task.scheduledHour = null;
   renderTimeline();
   renderTasks();
 }
 
-function save() {
-  localStorage.setItem('v-tasks', JSON.stringify(state.tasks));
-  localStorage.setItem('v-streak', state.streak);
-  localStorage.setItem('v-longest-streak', state.longestStreak);
-  localStorage.setItem('v-history', JSON.stringify(state.history));
-  if (state.lastCompleteDate) localStorage.setItem('v-last-date', state.lastCompleteDate);
-}
-
-// --- Streak logic ---
-function checkStreak() {
-  const today = new Date().toDateString();
+// --- Streak ---
+async function checkStreak() {
+  const today = todayDate();
   const allDone = state.tasks.length > 0 && state.tasks.every(t => t.completed);
 
   if (allDone && state.lastCompleteDate !== today) {
     state.streak++;
     state.longestStreak = Math.max(state.longestStreak, state.streak);
     state.lastCompleteDate = today;
-    save();
+
+    await supabaseClient
+      .from('profiles')
+      .update({
+        streak: state.streak,
+        longest_streak: state.longestStreak,
+        last_complete_date: today,
+      })
+      .eq('id', state.currentUser.id);
+
     renderStats();
   }
 }
@@ -307,12 +398,13 @@ function closeReflection() {
   reflectModal.classList.remove('open');
 }
 
-function saveReflection() {
-  const today = new Date().toDateString();
+async function saveReflection() {
+  if (!state.currentUser) return;
+
+  const today = todayDate();
   const total = state.tasks.length;
   const done = state.tasks.filter(t => t.completed).length;
 
-  // Build category breakdown
   const categoryBreakdown = { focus: 0, health: 0, learn: 0, build: 0, rest: 0 };
   state.tasks.forEach(t => {
     if (t.completed && categoryBreakdown.hasOwnProperty(t.category)) {
@@ -320,12 +412,9 @@ function saveReflection() {
     }
   });
 
-  // Remove any existing entry for today (re-reflecting)
-  state.history = state.history.filter(h => h.date !== today);
-
-  state.history.push({
+  const reflection = {
+    user_id: state.currentUser.id,
     date: today,
-    timestamp: Date.now(),
     total,
     completed: done,
     rate: total === 0 ? 0 : done / total,
@@ -333,12 +422,29 @@ function saveReflection() {
     focus: parseInt(focusSlider.value),
     note: reflectNote.value.trim(),
     categories: categoryBreakdown,
+  };
+
+  const { error } = await supabaseClient
+    .from('reflections')
+    .upsert(reflection, { onConflict: 'user_id,date' });
+
+  if (error) { console.error('Save reflection failed:', error); return; }
+
+  state.history = state.history.filter(h => h.date !== today);
+  state.history.unshift({
+    date: today,
+    timestamp: Date.now(),
+    total,
+    completed: done,
+    rate: reflection.rate,
+    energy: reflection.energy,
+    focus: reflection.focus,
+    note: reflection.note,
+    categories: categoryBreakdown,
   });
 
-  save();
   closeReflection();
 
-  // Brief visual confirmation
   reflectBtn.style.animation = 'none';
   void reflectBtn.offsetWidth;
   reflectBtn.style.animation = 'slide-in 0.5s ease';
@@ -435,7 +541,7 @@ function renderTimeline() {
     slot.addEventListener('drop', (e) => {
       e.preventDefault();
       slot.classList.remove('drag-over');
-      const id = parseFloat(e.dataTransfer.getData('text/plain'));
+      const id = e.dataTransfer.getData('text/plain');
       scheduleTask(id, hour);
     });
 
@@ -461,7 +567,6 @@ function renderAnalytics() {
   const hasData = filtered.length > 0;
   $('analytics-empty').classList.toggle('visible', !hasData);
 
-  // Summary cards
   const totalCompleted = filtered.reduce((sum, h) => sum + h.completed, 0);
   const totalTasks = filtered.reduce((sum, h) => sum + h.total, 0);
   const avgRate = totalTasks === 0 ? 0 : Math.round((totalCompleted / totalTasks) * 100);
@@ -472,7 +577,6 @@ function renderAnalytics() {
   $('summary-energy').textContent = avgEnergy;
   $('summary-streak').textContent = state.longestStreak;
 
-  // Charts
   renderChartCompletion(filtered);
   renderChartCategory(filtered);
   renderChartEnergy(filtered);
@@ -582,11 +686,7 @@ function renderChartEnergy(history) {
       ...chartBaseOptions(colors),
       scales: {
         ...chartBaseOptions(colors).scales,
-        y: {
-          ...chartBaseOptions(colors).scales.y,
-          min: 0,
-          max: 10,
-        },
+        y: { ...chartBaseOptions(colors).scales.y, min: 0, max: 10 },
       },
     },
   });
