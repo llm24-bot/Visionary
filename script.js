@@ -66,7 +66,21 @@ async function init() {
   applyTheme(state.theme);
   renderDate();
   attachEventListeners();
-  setInterval(() => { renderTimeline(); renderDate(); }, 60 * 1000);
+  let currentLoadedDate = todayDate();
+  setInterval(async () => {
+  renderTimeline();
+  renderDate();
+  // If midnight passed, reload data
+  if (todayDate() !== currentLoadedDate) {
+    currentLoadedDate = todayDate();
+    if (state.currentUser) {
+      await loadAllData();
+      renderTasks();
+      renderTimeline();
+      renderStats();
+    }
+  }
+}, 60 * 1000);
 
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
@@ -776,7 +790,6 @@ async function renderHistoryDetail(date) {
     `Completed ${day.completed} of ${day.total} tasks · ${pct}%`;
   $('copy-to-today-btn').style.display = '';
 
-  // Fetch the actual tasks for that date
   const { data: tasks, error } = await supabaseClient
     .from('tasks')
     .select('*')
@@ -784,10 +797,7 @@ async function renderHistoryDetail(date) {
     .eq('date', date)
     .order('created_at', { ascending: true });
 
-  if (error) {
-    console.error('Failed to load past tasks:', error);
-    return;
-  }
+  if (error) { console.error('Failed to load past tasks:', error); return; }
 
   const body = $('history-detail-body');
   body.innerHTML = `
@@ -876,6 +886,28 @@ async function copyDayToToday(date) {
   renderStats();
   switchView('today');
 }
+
+// --- Re-sync data when tab regains focus ---
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && state.currentUser) {
+    // Check if session is still valid
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) {
+      // Session expired — let the auth state change handler kick in
+      return;
+    }
+    // Check if it's a new day
+    const lastSeen = state.lastVisibleDate || todayDate();
+    state.lastVisibleDate = todayDate();
+    if (lastSeen !== todayDate()) {
+      // New day — reload everything
+      await loadAllData();
+    }
+    renderTasks();
+    renderTimeline();
+    renderStats();
+  }
+});
 
 // --- Helpers ---
 function formatHour(hour) {
