@@ -76,9 +76,10 @@
         <div class="logo-mark"></div>
         <span class="logo-text">Visionary</span>
       </div>
-      <div class="view-switcher">
-        <button class="view-btn active" data-view="today">Today</button>
-        <button class="view-btn" data-view="analytics">Analytics</button>
+        <div class="view-switcher">
+          <button class="view-btn active" data-view="today">Today</button>
+          <button class="view-btn" data-view="history">History</button>
+          <button class="view-btn" data-view="analytics">Analytics</button>
       </div>
     </div>
     <div class="nav-right">
@@ -179,7 +180,54 @@
       </div>
     </section>
   </main>
+<!-- HISTORY VIEW -->
+  <main class="app-grid view view-history" id="view-history">
+    <section class="col full-width">
+      <div class="analytics-header">
+        <div>
+          <h1>Your History</h1>
+          <p class="subtitle">Look back at past days. Copy what worked.</p>
+        </div>
+      </div>
 
+      <div class="history-layout">
+        <!-- Left: list of past days -->
+        <div class="history-list-card card glass-card">
+          <div class="card-header">
+            <div>
+              <h3>Past days</h3>
+              <p class="subtitle">Click to view</p>
+            </div>
+          </div>
+          <ul class="history-list" id="history-list"></ul>
+          <div class="empty-state" id="history-list-empty">
+            <div class="empty-icon">📭</div>
+            <p>No past days yet. Reflections show up here once you complete a day.</p>
+          </div>
+        </div>
+
+        <!-- Right: detail of selected day -->
+        <div class="history-detail-card card glass-card">
+          <div class="card-header" id="history-detail-header">
+            <div>
+              <h3 id="history-detail-date">Select a day</h3>
+              <p class="subtitle" id="history-detail-summary">Pick a past day from the list.</p>
+            </div>
+            <button class="btn-primary" id="copy-to-today-btn" style="display: none;">
+              Copy to today
+            </button>
+          </div>
+
+          <div id="history-detail-body" class="history-detail-body">
+            <div class="empty-state">
+              <div class="empty-icon">←</div>
+              <p>Select a day from the list to see what you did.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
   <!-- ANALYTICS VIEW -->
   <main class="app-grid view view-analytics" id="view-analytics">
     <section class="col full-width">
