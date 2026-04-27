@@ -1154,3 +1154,142 @@ footer {
   color: var(--text-dim);
   font-style: italic;
 }
+
+/* ============================================
+   Mobile responsive fixes
+   ============================================ */
+@media (max-width: 700px) {
+  .nav {
+    flex-wrap: wrap;
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+
+  .nav-left {
+    width: 100%;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .view-switcher {
+    flex: 1;
+    overflow-x: auto;
+  }
+
+  .view-btn {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .nav-right {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  .date-display {
+    font-size: 0.75rem;
+    margin-right: auto;
+  }
+
+  .app-grid {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .stats-strip {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+
+  .stat-card {
+    padding: 0.75rem;
+  }
+
+  .stat-value {
+    font-size: 1.15rem;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+  }
+
+  .card {
+    padding: 1.25rem;
+  }
+
+  .card-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .shortcut-hint {
+    display: none; /* Hide "Press N to add" on mobile (no keyboard) */
+  }
+
+  .input-row {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  #task-input {
+    flex: 1 1 100%;
+    order: 1;
+  }
+
+  .custom-select {
+    flex: 1;
+    order: 2;
+  }
+
+  .select-trigger {
+    width: 100%;
+    min-width: 0;
+  }
+
+  #add-btn {
+    flex: 0 0 auto;
+    order: 3;
+    padding: 0.75rem 1.25rem;
+  }
+
+  .timeline-card {
+    max-height: 60vh;
+  }
+
+  .auth-card {
+    padding: 1.5rem;
+  }
+
+  .auth-title {
+    font-size: 1.4rem;
+  }
+
+  .analytics-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .history-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .modal {
+    padding: 1.5rem;
+    max-height: 85vh;
+  }
+}
+
+@media (max-width: 400px) {
+  .stats-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-value {
+    font-size: 1.4rem;
+  }
+}
