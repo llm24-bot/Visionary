@@ -890,24 +890,28 @@ async function copyDayToToday(date) {
 // --- Re-sync data when tab regains focus ---
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState === 'visible' && state.currentUser) {
-    // Check if session is still valid
     const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) {
-      // Session expired — let the auth state change handler kick in
-      return;
-    }
-    // Check if it's a new day
-    const lastSeen = state.lastVisibleDate || todayDate();
-    state.lastVisibleDate = todayDate();
-    if (lastSeen !== todayDate()) {
-      // New day — reload everything
-      await loadAllData();
-    }
+    if (!session) return;
+
+    // Always reload data when tab becomes visible — keeps multiple devices in sync
+    await loadAllData();
+    renderTasks();
+    renderTimeline();
+    renderStats();
+    if (state.currentView === 'history') renderHistoryList();
+    if (state.currentView === 'analytics') renderAnalytics();
+  }
+});
+
+// Also poll for updates every 30 seconds when tab is active (multi-device sync)
+setInterval(async () => {
+  if (document.visibilityState === 'visible' && state.currentUser) {
+    await loadTasks();
     renderTasks();
     renderTimeline();
     renderStats();
   }
-});
+}, 30 * 1000);
 
 // --- Helpers ---
 function formatHour(hour) {
