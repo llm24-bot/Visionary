@@ -181,6 +181,12 @@ function attachEventListeners() {
     if (e.key === 'Enter') handleAdd();
   });
 
+  // Copy past day to today
+  const copyBtn = document.getElementById('copy-to-today-btn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => copyDayToToday(selectedHistoryDate));
+  }
+
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
@@ -253,6 +259,7 @@ function switchView(view) {
   $('view-' + view).classList.add('active');
 
   if (view === 'analytics') renderAnalytics();
+  if (view === 'history') renderHistoryList();
 }
 
 // --- Date / time ---
@@ -704,6 +711,170 @@ function chartBaseOptions(colors) {
       y: { ticks: { color: colors.text }, grid: { color: colors.grid }, beginAtZero: true },
     },
   };
+}
+
+// --- Rendering: History ---
+let selectedHistoryDate = null;
+
+function renderHistoryList() {
+  const listEl = $('history-list');
+  const emptyEl = $('history-list-empty');
+
+  if (state.history.length === 0) {
+    listEl.innerHTML = '';
+    emptyEl.classList.remove('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+
+  listEl.innerHTML = '';
+
+  state.history.forEach(day => {
+    const li = document.createElement('li');
+    li.className = 'history-day' + (day.date === selectedHistoryDate ? ' active' : '');
+
+    const pct = Math.round((day.rate || 0) * 100);
+    const dateObj = new Date(day.date);
+    const dateLabel = dateObj.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric'
+    });
+
+    li.innerHTML = `
+      <div class="history-day-date">${dateLabel}</div>
+      <div class="history-day-meta">
+        <span>${day.completed}/${day.total}</span>
+        <div class="history-day-bar">
+          <div class="history-day-bar-fill" style="width: ${pct}%"></div>
+        </div>
+        <span>${pct}%</span>
+      </div>
+    `;
+
+    li.addEventListener('click', () => selectHistoryDay(day.date));
+    listEl.appendChild(li);
+  });
+}
+
+async function selectHistoryDay(date) {
+  selectedHistoryDate = date;
+  renderHistoryList();
+  await renderHistoryDetail(date);
+}
+
+async function renderHistoryDetail(date) {
+  const day = state.history.find(h => h.date === date);
+  if (!day) return;
+
+  const dateObj = new Date(date);
+  const dateLabel = dateObj.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric'
+  });
+  const pct = Math.round((day.rate || 0) * 100);
+
+  $('history-detail-date').textContent = dateLabel;
+  $('history-detail-summary').textContent =
+    `Completed ${day.completed} of ${day.total} tasks · ${pct}%`;
+  $('copy-to-today-btn').style.display = '';
+
+  // Fetch the actual tasks for that date
+  const { data: tasks, error } = await supabaseClient
+    .from('tasks')
+    .select('*')
+    .eq('user_id', state.currentUser.id)
+    .eq('date', date)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Failed to load past tasks:', error);
+    return;
+  }
+
+  const body = $('history-detail-body');
+  body.innerHTML = `
+    <div class="history-stats">
+      <div class="history-stat">
+        <div class="history-stat-label">Tasks</div>
+        <div class="history-stat-value">${day.completed}/${day.total}</div>
+      </div>
+      <div class="history-stat">
+        <div class="history-stat-label">Rate</div>
+        <div class="history-stat-value">${pct}%</div>
+      </div>
+      <div class="history-stat">
+        <div class="history-stat-label">Energy</div>
+        <div class="history-stat-value">${day.energy}/10</div>
+      </div>
+      <div class="history-stat">
+        <div class="history-stat-label">Focus</div>
+        <div class="history-stat-value">${day.focus}/10</div>
+      </div>
+    </div>
+
+    ${(tasks && tasks.length > 0) ? `
+      <div>
+        <div class="history-section-title">Tasks that day</div>
+        <ul class="history-task-list">
+          ${tasks.map(t => `
+            <li class="history-task ${t.completed ? 'was-completed' : ''}">
+              <div class="task-category-dot ${t.category}"></div>
+              <span>${escapeHtml(t.text)}</span>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+    ` : ''}
+
+    ${day.note ? `
+      <div>
+        <div class="history-section-title">Reflection note</div>
+        <div class="history-note">"${escapeHtml(day.note)}"</div>
+      </div>
+    ` : ''}
+  `;
+}
+
+// --- Copy past day to today ---
+async function copyDayToToday(date) {
+  if (!date || !state.currentUser) return;
+
+  if (!confirm('Copy this day\'s tasks to today? This will add them as new uncompleted tasks.')) return;
+
+  // Fetch past tasks
+  const { data: pastTasks, error } = await supabaseClient
+    .from('tasks')
+    .select('*')
+    .eq('user_id', state.currentUser.id)
+    .eq('date', date);
+
+  if (error) { console.error('Copy fetch failed:', error); return; }
+  if (!pastTasks || pastTasks.length === 0) {
+    alert('No tasks to copy from that day.');
+    return;
+  }
+
+  // Create new tasks for today (uncompleted)
+  const today = todayDate();
+  const newTasks = pastTasks.map(t => ({
+    user_id: state.currentUser.id,
+    text: t.text,
+    category: t.category,
+    completed: false,
+    scheduled_hour: t.scheduled_hour,
+    date: today,
+  }));
+
+  const { error: insertError } = await supabaseClient
+    .from('tasks')
+    .insert(newTasks);
+
+  if (insertError) { console.error('Copy insert failed:', insertError); return; }
+
+  // Reload today's tasks and switch view
+  await loadTasks();
+  renderTasks();
+  renderTimeline();
+  renderStats();
+  switchView('today');
 }
 
 // --- Helpers ---
