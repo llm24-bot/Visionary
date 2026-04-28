@@ -1293,3 +1293,91 @@ footer {
     font-size: 1.4rem;
   }
 }
+
+/* ============================================
+   AI Suggest button + insight box
+   ============================================ */
+.btn-ai {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.8rem;
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.15), rgba(96, 165, 250, 0.15));
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 8px;
+  color: var(--accent-1);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-ai:hover {
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.25), rgba(96, 165, 250, 0.25));
+  border-color: var(--accent-1);
+  transform: translateY(-1px);
+}
+
+.btn-ai:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ai-suggestion-popup {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.08), rgba(96, 165, 250, 0.08));
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text);
+  position: relative;
+  animation: slide-in 0.4s ease-out;
+}
+
+.ai-suggestion-popup::before {
+  content: '✨';
+  position: absolute;
+  top: -10px;
+  left: 12px;
+  background: var(--bg);
+  padding: 0 6px;
+  font-size: 0.9rem;
+}
+
+.ai-suggestion-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.ai-insight-area {
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.08), rgba(96, 165, 250, 0.08));
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  border-radius: 10px;
+  margin-top: 0.5rem;
+  animation: slide-in 0.4s ease-out;
+}
+
+.ai-insight-label {
+  font-size: 0.7rem;
+  color: var(--accent-1);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.ai-insight-text {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text);
+}

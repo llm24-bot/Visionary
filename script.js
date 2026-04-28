@@ -464,7 +464,16 @@ async function saveReflection() {
     categories: categoryBreakdown,
   });
 
+  // Show AI insight before closing
+await showReflectionInsight();
+
+// Close after a few seconds
+setTimeout(() => {
   closeReflection();
+  // Reset insight for next time
+  const insightArea = document.getElementById('ai-insight-area');
+  if (insightArea) insightArea.style.display = 'none';
+}, 8000);
 
   reflectBtn.style.animation = 'none';
   void reflectBtn.offsetWidth;
@@ -924,4 +933,92 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+// ============================================
+// AI INTEGRATION
+// ============================================
+
+async function callAI(mode, payload = {}) {
+  const { data, error } = await supabaseClient.functions.invoke('ai-suggest', {
+    body: {
+      mode,
+      tasks: state.tasks,
+      history: state.history,
+      currentHour: new Date().getHours(),
+      ...payload,
+    },
+  });
+
+  if (error) {
+    console.error('AI call failed:', error);
+    return null;
+  }
+  return data?.suggestion || null;
+}
+
+// --- Suggest next action ---
+const aiSuggestBtn = document.getElementById('ai-suggest-btn');
+const aiSuggestLabel = document.getElementById('ai-suggest-label');
+
+if (aiSuggestBtn) {
+  aiSuggestBtn.addEventListener('click', async () => {
+    if (!state.currentUser) return;
+
+    aiSuggestBtn.disabled = true;
+    aiSuggestLabel.textContent = 'Thinking...';
+
+    const suggestion = await callAI('next-action');
+
+    aiSuggestBtn.disabled = false;
+    aiSuggestLabel.textContent = 'Suggest';
+
+    if (suggestion) {
+      showAISuggestion(suggestion);
+    } else {
+      showAISuggestion("Couldn't reach the AI right now. Try again in a moment.");
+    }
+  });
+}
+
+function showAISuggestion(text) {
+  // Remove any existing popup
+  const existing = document.querySelector('.ai-suggestion-popup');
+  if (existing) existing.remove();
+
+  // Find the focus card and append the suggestion
+  const focusCard = document.querySelector('.col-left .glass-card');
+  if (!focusCard) return;
+
+  const popup = document.createElement('div');
+  popup.className = 'ai-suggestion-popup';
+  popup.innerHTML = `
+    ${escapeHtml(text)}
+    <button class="ai-suggestion-close" title="Dismiss">✕</button>
+  `;
+  popup.querySelector('.ai-suggestion-close').addEventListener('click', () => popup.remove());
+
+  focusCard.appendChild(popup);
+
+  // Auto-dismiss after 30 seconds
+  setTimeout(() => {
+    if (popup.parentNode) popup.remove();
+  }, 30000);
+}
+
+// --- AI insight on reflection save ---
+async function showReflectionInsight() {
+  const insightArea = document.getElementById('ai-insight-area');
+  const insightText = document.getElementById('ai-insight-text');
+  if (!insightArea || !insightText) return;
+
+  insightArea.style.display = '';
+  insightText.textContent = 'Thinking about your day...';
+
+  const insight = await callAI('insight');
+  if (insight) {
+    insightText.textContent = insight;
+  } else {
+    insightArea.style.display = 'none';
+  }
 }
