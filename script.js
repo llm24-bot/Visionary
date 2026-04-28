@@ -66,6 +66,33 @@ const els = {
 let chartCompletion = null;
 let chartCategory = null;
 let chartEnergy = null;
+
+function parseAppDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+  if (typeof value === 'string') {
+    const ymd = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (ymd) return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatAppDateLabel(value, options = { month: 'short', day: 'numeric' }) {
+  const date = parseAppDate(value);
+  return date ? date.toLocaleDateString('en-US', options) : '—';
+}
+
+function sortByAppDateAsc(items = []) {
+  return [...items].sort((a, b) => {
+    const aTime = parseAppDate(a.date)?.getTime() ?? 0;
+    const bTime = parseAppDate(b.date)?.getTime() ?? 0;
+    return aTime - bTime;
+  });
+}
+
 let selectedHistoryDate = null;
 let currentLoadedDate = todayDate();
 let initialized = false;
@@ -227,6 +254,9 @@ function attachEventListeners() {
     if (e.key === 'Escape' && els.reflectModal?.classList.contains('open')) closeReflection();
   });
   els.aiSuggestBtn?.addEventListener('click', handleAISuggest);
+  $('schedule-image-input')?.addEventListener('change', handleScheduleImageUpload);
+  $('connect-google-calendar')?.addEventListener('click', () => handleCalendarConnect('Google'));
+  $('connect-outlook-calendar')?.addEventListener('click', () => handleCalendarConnect('Outlook'));
 }
 
 function renderAll() {
@@ -469,7 +499,7 @@ function renderAnalytics() {
   const period = state.analyticsPeriod;
   const cutoff = Date.now() - period * 24 * 60 * 60 * 1000;
   const filtered = period === 9999 ? state.history : state.history.filter(h => h.timestamp >= cutoff);
-  const chartData = [...filtered].sort((a, b) => new Date(`${a.date}T00:00:00`).getTime() - new Date(`${b.date}T00:00:00`).getTime());
+  const chartData = sortByAppDateAsc(filtered);
   const hasData = filtered.length > 0;
   els.analyticsEmpty.classList.toggle('visible', !hasData);
   $('summary-completed').textContent = filtered.reduce((sum, h) => sum + h.completed, 0);
@@ -517,7 +547,7 @@ function renderChartCompletion(history) {
   chartCompletion = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: history.map(h => new Date(`${h.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+      labels: history.map(h => formatAppDateLabel(h.date, { month: 'short', day: 'numeric' })),
       datasets: [{ label: 'Completed', data: history.map(h => h.completed), backgroundColor: colors.accent1 + 'cc', borderRadius: 8 }]
     },
     options: chartBaseOptions(colors)
@@ -551,7 +581,7 @@ function renderChartEnergy(history) {
   chartEnergy = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: history.map(h => new Date(`${h.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+      labels: history.map(h => formatAppDateLabel(h.date, { month: 'short', day: 'numeric' })),
       datasets: [
         { label: 'Energy', data: history.map(h => h.energy), borderColor: colors.accent4, backgroundColor: colors.accent4 + '22', tension: .35, pointRadius: 4 },
         { label: 'Focus', data: history.map(h => h.focus), borderColor: colors.accent1, backgroundColor: colors.accent1 + '22', tension: .35, pointRadius: 4 }
@@ -572,7 +602,7 @@ function renderHistoryList() {
     const li = document.createElement('li');
     li.className = 'history-day' + (day.date === selectedHistoryDate ? ' active' : '');
     const pct = Math.round((day.rate || 0) * 100);
-    const dateLabel = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const dateLabel = formatAppDateLabel(day.date, { weekday: 'short', month: 'short', day: 'numeric' });
     li.innerHTML = `<div class="history-day-date">${dateLabel}</div><div class="history-day-meta"><span>${day.completed}/${day.total}</span><div class="history-day-bar"><div class="history-day-bar-fill" style="width:${pct}%"></div></div><span>${pct}%</span></div>`;
     li.addEventListener('click', () => selectHistoryDay(day.date));
     els.historyList.appendChild(li);
@@ -589,7 +619,7 @@ async function renderHistoryDetail(date) {
   const day = state.history.find(h => h.date === date);
   if (!day || !state.currentUser) return;
   const pct = Math.round((day.rate || 0) * 100);
-  els.historyDetailDate.textContent = new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  els.historyDetailDate.textContent = formatAppDateLabel(date, { weekday: 'long', month: 'long', day: 'numeric' });
   els.historyDetailSummary.textContent = `Completed ${day.completed} of ${day.total} tasks · ${pct}%`;
   els.copyToTodayBtn.classList.remove('hidden');
   const { data: tasks, error } = await supabaseClient
@@ -680,6 +710,25 @@ function escapeHtml(str = '') {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+// Placeholder functions for calendar integration and schedule image upload
+async function callAI(mode, payload = {}) {
+  const { data, error } = await supabaseClient.functions.invoke('ai-suggest', {
+    body: {
+      mode,
+      payload: {
+        tasks: state.tasks,
+        history: state.history,
+        currentHour: new Date().getHours(),
+        ...payload
+      }
+    }
+  });
+
+  if (error) throw error;
+  if (mode === 'schedule-import') return data;
+  return data?.suggestion || null;
 }
 
 init();
