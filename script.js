@@ -469,7 +469,7 @@ function renderAnalytics() {
   const period = state.analyticsPeriod;
   const cutoff = Date.now() - period * 24 * 60 * 60 * 1000;
   const filtered = period === 9999 ? state.history : state.history.filter(h => h.timestamp >= cutoff);
-  const chartData = [...filtered].reverse();
+  const chartData = [...filtered].sort((a, b) => new Date(`${a.date}T00:00:00`).getTime() - new Date(`${b.date}T00:00:00`).getTime());
   const hasData = filtered.length > 0;
   els.analyticsEmpty.classList.toggle('visible', !hasData);
   $('summary-completed').textContent = filtered.reduce((sum, h) => sum + h.completed, 0);
@@ -517,7 +517,7 @@ function renderChartCompletion(history) {
   chartCompletion = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: history.map(h => new Date(h.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+      labels: history.map(h => new Date(`${h.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
       datasets: [{ label: 'Completed', data: history.map(h => h.completed), backgroundColor: colors.accent1 + 'cc', borderRadius: 8 }]
     },
     options: chartBaseOptions(colors)
@@ -551,7 +551,7 @@ function renderChartEnergy(history) {
   chartEnergy = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: history.map(h => new Date(h.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+      labels: history.map(h => new Date(`${h.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
       datasets: [
         { label: 'Energy', data: history.map(h => h.energy), borderColor: colors.accent4, backgroundColor: colors.accent4 + '22', tension: .35, pointRadius: 4 },
         { label: 'Focus', data: history.map(h => h.focus), borderColor: colors.accent1, backgroundColor: colors.accent1 + '22', tension: .35, pointRadius: 4 }
