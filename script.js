@@ -586,18 +586,20 @@ function renderTimeline() {
   }
 }
 
-// --- Rendering: Analytics ---
 function renderAnalytics() {
   const period = state.analyticsPeriod;
   const cutoff = Date.now() - (period * 24 * 60 * 60 * 1000);
   const filtered = period === 9999
     ? state.history
     : state.history.filter(h => h.timestamp >= cutoff);
-  const chartData = [...filtered].reverse(); // oldest → newest for charts
+
+  // state.history is newest-first (descending). For charts, reverse to get oldest-first (left → right).
+  const chartData = [...filtered].reverse();
 
   const hasData = filtered.length > 0;
   $('analytics-empty').classList.toggle('visible', !hasData);
 
+  // Summary cards
   const totalCompleted = filtered.reduce((sum, h) => sum + h.completed, 0);
   const totalTasks = filtered.reduce((sum, h) => sum + h.total, 0);
   const avgRate = totalTasks === 0 ? 0 : Math.round((totalCompleted / totalTasks) * 100);
@@ -608,8 +610,9 @@ function renderAnalytics() {
   $('summary-energy').textContent = avgEnergy;
   $('summary-streak').textContent = state.longestStreak;
 
+  // Charts use chartData (oldest → newest). Doughnut doesn't care about order.
   renderChartCompletion(chartData);
-  renderChartCategory(filtered); // doughnut doesn't care about order
+  renderChartCategory(filtered);
   renderChartEnergy(chartData);
 }
 
