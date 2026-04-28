@@ -4,6 +4,7 @@
 
 // --- State ---
 const todayDate = () => new Date().toDateString();
+const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const $ = (id) => document.getElementById(id);
 
 const state = {
@@ -94,7 +95,8 @@ function sortByAppDateAsc(items = []) {
 }
 
 let selectedHistoryDate = null;
-let currentLoadedDate = todayDate();
+let currentLoadedDate = todayISO();
+let bootstrapInFlight = null;
 let initialized = false;
 
 function init() {
@@ -107,8 +109,8 @@ function init() {
   setInterval(async () => {
     renderDate();
     renderTimeline();
-    if (todayDate() !== currentLoadedDate) {
-      currentLoadedDate = todayDate();
+    if (todayISO() !== currentLoadedDate) {
+      currentLoadedDate = todayISO();
       if (state.currentUser) {
         await loadAllData();
         renderAll();
@@ -137,10 +139,18 @@ function init() {
 
 window.visionaryOnSignedIn = async function(user) {
   state.currentUser = user;
-  currentLoadedDate = todayDate();
-  await ensureProfile(user.id);
-  await loadAllData();
-  renderAll();
+  currentLoadedDate = todayISO();
+  if (bootstrapInFlight) return bootstrapInFlight;
+  bootstrapInFlight = (async () => {
+    await ensureProfile(user.id);
+    await loadAllData();
+    renderAll();
+  })();
+  try {
+    await bootstrapInFlight;
+  } finally {
+    bootstrapInFlight = null;
+  }
 };
 
 window.visionaryOnSignedOut = function() {
@@ -167,11 +177,12 @@ async function loadAllData() {
 
 async function loadTasks() {
   if (!state.currentUser) return;
+  const today = todayISO();
   const { data, error } = await supabaseClient
     .from('tasks')
     .select('*')
     .eq('user_id', state.currentUser.id)
-    .eq('date', todayDate())
+    .eq('date', today)
     .order('created_at', { ascending: true });
   if (error) return console.error('Failed to load tasks:', error);
   state.tasks = (data || []).map(t => ({
@@ -297,7 +308,7 @@ async function handleAdd() {
   if (!text || !state.currentUser) return;
   const { data, error } = await supabaseClient
     .from('tasks')
-    .insert({ user_id: state.currentUser.id, text, category: state.selectedCategory, completed: false, date: todayDate() })
+    .insert({ user_id: state.currentUser.id, text, category: state.selectedCategory, completed: false, date: todayISO() })
     .select()
     .single();
   if (error) return console.error('Add failed:', error);
@@ -362,7 +373,7 @@ async function unscheduleTask(id) {
 }
 
 async function checkStreak() {
-  const today = todayDate();
+  const today = todayISO();
   const allDone = state.tasks.length > 0 && state.tasks.every(t => t.completed);
   if (!allDone || state.lastCompleteDate === today || !state.currentUser) return;
   state.streak += 1;
@@ -404,7 +415,7 @@ async function saveReflection() {
   state.tasks.forEach(t => { if (t.completed && categoryBreakdown[t.category] !== undefined) categoryBreakdown[t.category] += 1; });
   const reflection = {
     user_id: state.currentUser.id,
-    date: todayDate(),
+    date: todayISO(),
     total,
     completed: done,
     rate: total ? done / total : 0,
@@ -646,7 +657,7 @@ async function copyDayToToday(date) {
   const { data: pastTasks, error } = await supabaseClient.from('tasks').select('*').eq('user_id', state.currentUser.id).eq('date', date);
   if (error) return console.error('Copy fetch failed:', error);
   if (!pastTasks?.length) return alert('No tasks to copy from that day.');
-  const today = todayDate();
+  const today = todayISO();
   const newTasks = pastTasks.map(t => ({ user_id: state.currentUser.id, text: t.text, category: t.category, completed: false, scheduled_hour: t.scheduled_hour, date: today }));
   const { error: insertError } = await supabaseClient.from('tasks').insert(newTasks);
   if (insertError) return console.error('Copy insert failed:', insertError);
@@ -660,13 +671,14 @@ async function copyDayToToday(date) {
 async function callAI(mode, payload = {}) {
   try {
     const { data, error } = await supabaseClient.functions.invoke('ai-suggest', {
-      body: { mode, tasks: state.tasks, history: state.history, currentHour: new Date().getHours(), ...payload }
+      body: { mode, payload: { tasks: state.tasks, history: state.history, currentHour: new Date().getHours(), ...payload } }
     });
     if (error) throw error;
-    return data?.suggestion || null;
+    if (mode === 'schedule-import') return data;
+    return data?.suggestion || data?.message || null;
   } catch (error) {
     console.error('AI call failed:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -674,10 +686,44 @@ async function handleAISuggest() {
   if (!state.currentUser) return;
   els.aiSuggestBtn.disabled = true;
   els.aiSuggestLabel.textContent = 'Thinking...';
-  const suggestion = await callAI('next-action');
-  els.aiSuggestBtn.disabled = false;
-  els.aiSuggestLabel.textContent = 'Suggest';
-  showAISuggestion(suggestion || "Couldn't reach the AI right now. Try again in a moment.");
+  try {
+    const suggestion = await callAI('next-action');
+    showAISuggestion(suggestion || "Couldn't reach the AI right now. Try again in a moment.");
+  } catch {
+    showAISuggestion("Couldn't reach the AI right now. Try again in a moment.");
+  } finally {
+    els.aiSuggestBtn.disabled = false;
+    els.aiSuggestLabel.textContent = 'Suggest';
+  }
+}
+
+
+async function fileToBase64(file) {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error('Failed to read image file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addImportedTask(item) {
+  const payload = {
+    user_id: state.currentUser.id,
+    text: String(item.text || 'Imported task').trim(),
+    category: ['focus', 'health', 'learn', 'build', 'rest'].includes(item.category) ? item.category : 'focus',
+    completed: false,
+    date: todayISO(),
+    scheduled_hour: Number.isInteger(item.scheduledHour) ? item.scheduledHour : null
+  };
+  const { data, error } = await supabaseClient.from('tasks').insert(payload).select().single();
+  if (error) throw error;
+  state.tasks.unshift(normalizeTask(data));
+  renderAll();
 }
 
 function showAISuggestion(text) {
@@ -710,25 +756,6 @@ function escapeHtml(str = '') {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
-}
-
-// Placeholder functions for calendar integration and schedule image upload
-async function callAI(mode, payload = {}) {
-  const { data, error } = await supabaseClient.functions.invoke('ai-suggest', {
-    body: {
-      mode,
-      payload: {
-        tasks: state.tasks,
-        history: state.history,
-        currentHour: new Date().getHours(),
-        ...payload
-      }
-    }
-  });
-
-  if (error) throw error;
-  if (mode === 'schedule-import') return data;
-  return data?.suggestion || null;
 }
 
 init();
