@@ -2,140 +2,139 @@
 // VISIONARY — Authentication
 // ============================================
 
-const authScreen = document.getElementById('auth-screen');
-const appShell = document.getElementById('app-shell');
-const authTitle = document.getElementById('auth-title');
-const authSubtitle = document.getElementById('auth-subtitle');
-const authEmail = document.getElementById('auth-email');
-const authPassword = document.getElementById('auth-password');
-const authSubmit = document.getElementById('btn-auth-submit');
-const authError = document.getElementById('auth-error');
-const authToggleText = document.getElementById('auth-toggle-text');
-const authToggleLink = document.getElementById('auth-toggle-link');
-const btnGoogle = document.getElementById('btn-google');
+const authEls = {
+  authScreen: document.getElementById('auth-screen'),
+  appShell: document.getElementById('app-shell'),
+  authTitle: document.getElementById('auth-title'),
+  authSubtitle: document.getElementById('auth-subtitle'),
+  authEmail: document.getElementById('auth-email'),
+  authPassword: document.getElementById('auth-password'),
+  authSubmit: document.getElementById('btn-auth-submit'),
+  authError: document.getElementById('auth-error'),
+  authToggleText: document.getElementById('auth-toggle-text'),
+  authToggleLink: document.getElementById('auth-toggle-link'),
+  btnGoogle: document.getElementById('btn-google')
+};
 
 let isSignupMode = false;
 
-// --- Initial check: is someone already logged in? ---
-checkAuthState();
+function showApp() {
+  authEls.authScreen.style.display = 'none';
+  authEls.appShell.style.display = 'block';
+}
 
-async function checkAuthState() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session) {
-    showApp(session.user);
+function showAuth() {
+  authEls.authScreen.style.display = 'grid';
+  authEls.appShell.style.display = 'none';
+}
+
+function setAuthMode(signup) {
+  isSignupMode = signup;
+  authEls.authTitle.textContent = signup ? 'Create your account' : 'Welcome back';
+  authEls.authSubtitle.textContent = signup ? 'Start showing up — every day.' : 'Sign in to continue building your routine.';
+  authEls.authSubmit.textContent = signup ? 'Sign up' : 'Sign in';
+  authEls.authToggleText.textContent = signup ? 'Already have an account?' : "Don't have an account?";
+  authEls.authToggleLink.textContent = signup ? 'Sign in' : 'Sign up';
+  authEls.authPassword.autocomplete = signup ? 'new-password' : 'current-password';
+  authEls.authError.textContent = '';
+  authEls.authError.style.color = '';
+}
+
+async function handleSession(session) {
+  if (session?.user) {
+    showApp();
+    if (window.visionaryOnSignedIn) {
+      await window.visionaryOnSignedIn(session.user);
+    }
   } else {
     showAuth();
+    if (window.visionaryOnSignedOut) {
+      window.visionaryOnSignedOut();
+    }
   }
 }
 
-// Listen for auth changes (login, logout, etc.)
-supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_IN' && session) {
-    showApp(session.user);
-  } else if (event === 'SIGNED_OUT') {
-    showAuth();
+async function checkAuthState() {
+  const { data: { session }, error } = await supabaseClient.auth.getSession();
+  if (error) {
+    console.error('Session check failed:', error);
   }
-});
-
-// --- Toggle between signup and login ---
-authToggleLink.addEventListener('click', (e) => {
-  e.preventDefault();
-  isSignupMode = !isSignupMode;
-  if (isSignupMode) {
-    authTitle.textContent = 'Create your account';
-    authSubtitle.textContent = 'Start showing up — every day.';
-    authSubmit.textContent = 'Sign up';
-    authToggleText.textContent = 'Already have an account?';
-    authToggleLink.textContent = 'Sign in';
-  } else {
-    authTitle.textContent = 'Welcome back';
-    authSubtitle.textContent = 'Sign in to continue building your routine.';
-    authSubmit.textContent = 'Sign in';
-    authToggleText.textContent = "Don't have an account?";
-    authToggleLink.textContent = 'Sign up';
-  }
-  authError.textContent = '';
-});
-
-// --- Email/password submit ---
-authSubmit.addEventListener('click', handleEmailAuth);
-authPassword.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') handleEmailAuth();
-});
+  await handleSession(session);
+}
 
 async function handleEmailAuth() {
-  const email = authEmail.value.trim();
-  const password = authPassword.value;
-  authError.textContent = '';
+  const email = authEls.authEmail.value.trim();
+  const password = authEls.authPassword.value;
+  authEls.authError.textContent = '';
+  authEls.authError.style.color = '';
 
   if (!email || !password) {
-    authError.textContent = 'Please fill in both fields.';
+    authEls.authError.textContent = 'Please fill in both fields.';
     return;
   }
 
   if (isSignupMode && password.length < 6) {
-    authError.textContent = 'Password must be at least 6 characters.';
+    authEls.authError.textContent = 'Password must be at least 6 characters.';
     return;
   }
 
-  authSubmit.disabled = true;
-  authSubmit.textContent = isSignupMode ? 'Creating account...' : 'Signing in...';
+  authEls.authSubmit.disabled = true;
+  authEls.authSubmit.textContent = isSignupMode ? 'Creating account...' : 'Signing in...';
 
   try {
-    let result;
-    if (isSignupMode) {
-      result = await supabaseClient.auth.signUp({ email, password });
-    } else {
-      result = await supabaseClient.auth.signInWithPassword({ email, password });
-    }
+    const result = isSignupMode
+      ? await supabaseClient.auth.signUp({ email, password })
+      : await supabaseClient.auth.signInWithPassword({ email, password });
 
     if (result.error) {
-      authError.textContent = result.error.message;
+      authEls.authError.textContent = result.error.message;
     } else if (isSignupMode && !result.data.session) {
-      authError.textContent = 'Check your email to confirm your account.';
-      authError.style.color = 'var(--accent-3)';
+      authEls.authError.textContent = 'Check your email to confirm your account.';
+      authEls.authError.style.color = 'var(--accent-3)';
     }
-  } catch (err) {
-    authError.textContent = 'Something went wrong. Try again.';
+  } catch (error) {
+    console.error(error);
+    authEls.authError.textContent = 'Something went wrong. Try again.';
   } finally {
-    authSubmit.disabled = false;
-    authSubmit.textContent = isSignupMode ? 'Sign up' : 'Sign in';
+    authEls.authSubmit.disabled = false;
+    authEls.authSubmit.textContent = isSignupMode ? 'Sign up' : 'Sign in';
   }
 }
 
-// --- Google OAuth ---
-btnGoogle.addEventListener('click', async () => {
-  const { error } = await supabaseClient.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: window.location.origin },
-  });
-  if (error) authError.textContent = error.message;
-});
-
-// --- Show/hide ---
-function showApp(user) {
-  authScreen.style.display = 'none';
-  appShell.style.display = '';
-
-  // Wipe any leftover localStorage from pre-auth testing (one-time)
-  if (!localStorage.getItem('v-wiped-once')) {
-    localStorage.removeItem('v-tasks');
-    localStorage.removeItem('v-streak');
-    localStorage.removeItem('v-longest-streak');
-    localStorage.removeItem('v-last-date');
-    localStorage.removeItem('v-history');
-    localStorage.removeItem('v-last-seen');
-    localStorage.setItem('v-wiped-once', 'true');
-    location.reload();
-  }
-}
-
-function showAuth() {
-  authScreen.style.display = '';
-  appShell.style.display = 'none';
-}
-
-// --- Logout (called from logout button) ---
 async function logout() {
-  await supabaseClient.auth.signOut();
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) {
+    console.error('Logout failed:', error);
+  }
 }
+window.logout = logout;
+
+function initAuth() {
+  setAuthMode(false);
+  checkAuthState();
+
+  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    await handleSession(session);
+  });
+
+  authEls.authToggleLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    setAuthMode(!isSignupMode);
+  });
+
+  authEls.authSubmit.addEventListener('click', handleEmailAuth);
+  authEls.authPassword.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleEmailAuth();
+  });
+
+  authEls.btnGoogle.addEventListener('click', async () => {
+    authEls.authError.textContent = '';
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin + window.location.pathname }
+    });
+    if (error) authEls.authError.textContent = error.message;
+  });
+}
+
+initAuth();

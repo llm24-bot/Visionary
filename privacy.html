@@ -2,54 +2,50 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Privacy Policy — Visionary</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    .policy-wrap { max-width: 720px; margin: 0 auto; padding: 4rem 2rem; line-height: 1.7; position: relative; z-index: 5; }
-    .policy-wrap h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-    .policy-wrap h2 { font-size: 1.2rem; margin: 2rem 0 0.75rem; }
-    .policy-wrap p { margin-bottom: 1rem; color: var(--text-dim); }
-    .policy-wrap a { color: var(--accent-1); }
-    .policy-wrap .updated { color: var(--text-faint); font-size: 0.85rem; margin-bottom: 2rem; }
+    :root { --bg:#0d1117; --surface:rgba(17,25,40,.62); --text:#f5f7fb; --text-dim:#b4bfd1; --border:rgba(255,255,255,.09); --accent:#45d0d6; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter,system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    .bg-blobs { position:fixed; inset:0; overflow:hidden; pointer-events:none; }
+    .blob { position:absolute; width:320px; height:320px; border-radius:999px; filter:blur(80px); opacity:.18; }
+    .blob-1 { background:#45d0d6; left:-60px; top:-80px; }
+    .blob-2 { background:#7c87ff; right:-70px; top:10%; }
+    .policy-wrap { max-width:760px; margin:0 auto; padding:4rem 1.25rem; line-height:1.75; position:relative; z-index:1; }
+    h1 { font-size:2rem; margin:0 0 .5rem; }
+    h2 { margin-top:2rem; }
+    p { color:var(--text-dim); }
+    a { color:var(--accent); text-decoration:none; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:24px; padding:28px; backdrop-filter:blur(20px); }
   </style>
 </head>
 <body>
-  <div class="bg-blobs">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-  </div>
-
+  <div class="bg-blobs"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
   <div class="policy-wrap">
     <p><a href="index.html">← Back to Visionary</a></p>
-    <h1>Privacy Policy</h1>
-    <p class="updated">Last updated: April 2026</p>
-
-    <p>Visionary is a personal productivity tool built by a college student, currently in early development. This policy explains how your data is handled.</p>
-
-    <h2>What we collect</h2>
-    <p>When you create an account, we collect your email address (or Google profile info if you sign in with Google). When you use the app, we store the tasks you add and the reflections you log.</p>
-
-    <h2>Where it's stored</h2>
-    <p>Your account and your data are stored on Supabase, a hosting platform that powers the backend. Communication between your browser and the server is encrypted using HTTPS.</p>
-
-    <h2>Passwords</h2>
-    <p>Your password is never stored in readable form. It's encrypted using a one-way hash before it ever touches our database. Even the developer cannot view it. If you sign in with Google, no password is created at all.</p>
-
-    <h2>Who can see your data</h2>
-    <p>Other users cannot see your data. Database security rules ensure each account only has access to its own tasks and reflections. The developer (the person building this app) can technically access the database, which means task and reflection content is visible to them. Please don't enter sensitive personal information you wouldn't want them to read.</p>
-
-    <h2>Tracking and analytics</h2>
-    <p>Visionary does not use third-party tracking, advertising, or behavioral analytics tools. We do not sell, trade, or share your data with anyone.</p>
-
-    <h2>Your rights</h2>
-    <p>You can stop using Visionary at any time. If you want your account and data deleted, contact the developer (info below) and it will be removed within a few days.</p>
-
-    <h2>Future changes</h2>
-    <p>If Visionary adds features that meaningfully change how data is handled (such as sharing features, AI training on user data, or third-party integrations), this policy will be updated and you'll be notified before any change takes effect.</p>
-
-    <h2>Contact</h2>
-    <p>Visionary is built by a college student as a solo project. For questions or to request data deletion, reach out at louisl4764@gmail.com.</p>
+    <div class="card">
+      <h1>Privacy Policy</h1>
+      <p>Last updated: April 2026</p>
+      <p>Visionary is a personal productivity tool built by a college student and currently in early development. This policy explains what data is collected, where it is stored, and how it is used.</p>
+      <h2>What we collect</h2>
+      <p>When you create an account, Visionary stores your email address or the profile details returned by Google sign-in. When you use the app, it stores your tasks, scheduling choices, reflections, and related productivity data.</p>
+      <h2>Where it is stored</h2>
+      <p>Your account and app data are stored using Supabase. Data sent between your browser and the backend is protected over HTTPS.</p>
+      <h2>Passwords</h2>
+      <p>Your password is not stored in readable form. Passwords are hashed using a one-way cryptographic process handled by the authentication provider. If you sign in with Google, Visionary does not create a password for you.</p>
+      <h2>Who can access your data</h2>
+      <p>Other users should not be able to view your data. Visionary is intended to use per-user database access rules so each account can only access its own records. Because the app is operated by a solo developer, the developer may still be able to access stored data at the infrastructure level.</p>
+      <h2>Tracking and analytics</h2>
+      <p>Visionary does not currently use advertising trackers. If product analytics, sharing features, or third-party AI processing are added in a meaningful way later, this policy should be updated before those changes take effect.</p>
+      <h2>Your choices</h2>
+      <p>You can stop using Visionary at any time. If you want your account and stored data removed, contact the developer and request deletion.</p>
+      <h2>Contact</h2>
+      <p>For questions or deletion requests, email <a href="mailto:louisl4764@gmail.com">louisl4764@gmail.com</a>.</p>
+    </div>
   </div>
 </body>
 </html>

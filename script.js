@@ -3,570 +3,455 @@
 // ============================================
 
 // --- State ---
+const todayDate = () => new Date().toDateString();
+const $ = (id) => document.getElementById(id);
+
 const state = {
   tasks: [],
   streak: 0,
   longestStreak: 0,
   lastCompleteDate: null,
   history: [],
-  theme: localStorage.getItem('v-theme') || 'dark',
+  theme: 'dark',
   selectedCategory: 'focus',
   currentView: 'today',
   analyticsPeriod: 7,
-  currentUser: null,
-  viewingDate: null,
+  currentUser: null
 };
 
-const todayDate = () => new Date().toDateString();
-
-// --- DOM refs ---
-const $ = (id) => document.getElementById(id);
-
-const taskInput = $('task-input');
-const categorySelect = $('category-select');
-const selectTrigger = $('select-trigger');
-const selectLabel = $('select-label');
-const selectOptions = $('select-options');
-const addBtn = $('add-btn');
-const taskList = $('task-list');
-const emptyState = $('empty-state');
-const streakCount = $('streak-count');
-const completedCount = $('completed-count');
-const totalCount = $('total-count');
-const progressPercent = $('progress-percent');
-const progressBar = $('progress-bar');
-const timelineContainer = $('timeline-container');
-const dateDisplay = $('date-display');
-const nowTime = $('now-time');
-
-const themeToggle = $('theme-toggle');
-const themeIcon = $('theme-icon');
-const reflectBtn = $('reflect-btn');
-
-const reflectModal = $('reflect-modal');
-const reflectClose = $('reflect-close');
-const reflectDone = $('reflect-done');
-const reflectTotal = $('reflect-total');
-const reflectRate = $('reflect-rate');
-const energySlider = $('energy-slider');
-const focusSlider = $('focus-slider');
-const energyVal = $('energy-val');
-const focusVal = $('focus-val');
-const reflectNote = $('reflect-note');
-const reflectSave = $('reflect-save');
+const els = {
+  taskInput: $('task-input'),
+  categorySelect: $('category-select'),
+  selectTrigger: $('select-trigger'),
+  selectLabel: $('select-label'),
+  selectOptions: $('select-options'),
+  addBtn: $('add-btn'),
+  taskList: $('task-list'),
+  emptyState: $('empty-state'),
+  streakCount: $('streak-count'),
+  completedCount: $('completed-count'),
+  totalCount: $('total-count'),
+  progressPercent: $('progress-percent'),
+  progressBar: $('progress-bar'),
+  timelineContainer: $('timeline-container'),
+  dateDisplay: $('date-display'),
+  nowTime: $('now-time'),
+  themeToggle: $('theme-toggle'),
+  themeIcon: $('theme-icon'),
+  reflectBtn: $('reflect-btn'),
+  reflectModal: $('reflect-modal'),
+  reflectClose: $('reflect-close'),
+  reflectDone: $('reflect-done'),
+  reflectTotal: $('reflect-total'),
+  reflectRate: $('reflect-rate'),
+  energySlider: $('energy-slider'),
+  focusSlider: $('focus-slider'),
+  energyVal: $('energy-val'),
+  focusVal: $('focus-val'),
+  reflectNote: $('reflect-note'),
+  reflectSave: $('reflect-save'),
+  analyticsEmpty: $('analytics-empty'),
+  historyList: $('history-list'),
+  historyListEmpty: $('history-list-empty'),
+  historyDetailDate: $('history-detail-date'),
+  historyDetailSummary: $('history-detail-summary'),
+  historyDetailBody: $('history-detail-body'),
+  copyToTodayBtn: $('copy-to-today-btn'),
+  aiSuggestBtn: $('ai-suggest-btn'),
+  aiSuggestLabel: $('ai-suggest-label'),
+  aiInsightArea: $('ai-insight-area'),
+  aiInsightText: $('ai-insight-text')
+};
 
 let chartCompletion = null;
 let chartCategory = null;
 let chartEnergy = null;
+let selectedHistoryDate = null;
+let currentLoadedDate = todayDate();
+let initialized = false;
 
-// --- Init ---
-init();
-
-async function init() {
-  applyTheme(state.theme);
+function init() {
+  if (initialized) return;
+  initialized = true;
+  applyTheme('dark');
   renderDate();
   attachEventListeners();
-  let currentLoadedDate = todayDate();
+
   setInterval(async () => {
-  renderTimeline();
-  renderDate();
-  // If midnight passed, reload data
-  if (todayDate() !== currentLoadedDate) {
-    currentLoadedDate = todayDate();
-    if (state.currentUser) {
-      await loadAllData();
+    renderDate();
+    renderTimeline();
+    if (todayDate() !== currentLoadedDate) {
+      currentLoadedDate = todayDate();
+      if (state.currentUser) {
+        await loadAllData();
+        renderAll();
+      }
+    }
+  }, 60000);
+
+  setInterval(async () => {
+    if (document.visibilityState === 'visible' && state.currentUser) {
+      await loadTasks();
       renderTasks();
       renderTimeline();
       renderStats();
     }
-  }
-}, 60 * 1000);
+  }, 30000);
 
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session) {
-    state.currentUser = session.user;
-    await loadAllData();
-  }
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && state.currentUser) {
+      await loadAllData();
+      renderAll();
+    }
+  });
 
-  renderTimeline();
-  renderTasks();
-  renderStats();
+  renderAll();
 }
 
-// Re-init when auth changes
-supabaseClient?.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'SIGNED_IN') {
-    state.currentUser = session.user;
-    await loadAllData();
-    renderTimeline();
-    renderTasks();
-    renderStats();
-  } else if (event === 'SIGNED_OUT') {
-    state.tasks = [];
-    state.history = [];
-    state.streak = 0;
-    state.longestStreak = 0;
-    state.currentUser = null;
-  }
-});
+window.visionaryOnSignedIn = async function(user) {
+  state.currentUser = user;
+  currentLoadedDate = todayDate();
+  await ensureProfile(user.id);
+  await loadAllData();
+  renderAll();
+};
 
-// --- Data loading ---
+window.visionaryOnSignedOut = function() {
+  state.currentUser = null;
+  state.tasks = [];
+  state.history = [];
+  state.streak = 0;
+  state.longestStreak = 0;
+  state.lastCompleteDate = null;
+  selectedHistoryDate = null;
+  renderAll();
+};
+
+async function ensureProfile(userId) {
+  const payload = { id: userId, streak: 0, longest_streak: 0, last_complete_date: null };
+  const { error } = await supabaseClient.from('profiles').upsert(payload, { onConflict: 'id' });
+  if (error) console.error('Profile bootstrap failed:', error);
+}
+
 async function loadAllData() {
-  await Promise.all([
-    loadTasks(),
-    loadProfile(),
-    loadHistory(),
-  ]);
+  if (!state.currentUser) return;
+  await Promise.all([loadTasks(), loadProfile(), loadHistory()]);
 }
 
 async function loadTasks() {
+  if (!state.currentUser) return;
   const { data, error } = await supabaseClient
     .from('tasks')
     .select('*')
     .eq('user_id', state.currentUser.id)
     .eq('date', todayDate())
     .order('created_at', { ascending: true });
-
-  if (error) { console.error('Failed to load tasks:', error); return; }
-
+  if (error) return console.error('Failed to load tasks:', error);
   state.tasks = (data || []).map(t => ({
     id: t.id,
     text: t.text,
     category: t.category,
-    completed: t.completed,
-    scheduledHour: t.scheduled_hour,
-    createdAt: new Date(t.created_at).getTime(),
-    completedAt: t.completed_at ? new Date(t.completed_at).getTime() : null,
+    completed: !!t.completed,
+    scheduledHour: Number.isInteger(t.scheduled_hour) ? t.scheduled_hour : null,
+    createdAt: t.created_at ? new Date(t.created_at).getTime() : Date.now(),
+    completedAt: t.completed_at ? new Date(t.completed_at).getTime() : null
   }));
 }
 
 async function loadProfile() {
+  if (!state.currentUser) return;
   const { data, error } = await supabaseClient
     .from('profiles')
     .select('*')
     .eq('id', state.currentUser.id)
     .single();
-  if (error) { console.error('Failed to load profile:', error); return; }
-  state.streak = data.streak || 0;
-  state.longestStreak = data.longest_streak || 0;
-  state.lastCompleteDate = data.last_complete_date;
+  if (error) return console.error('Failed to load profile:', error);
+  state.streak = data?.streak || 0;
+  state.longestStreak = data?.longest_streak || 0;
+  state.lastCompleteDate = data?.last_complete_date || null;
 }
 
 async function loadHistory() {
+  if (!state.currentUser) return;
   const { data, error } = await supabaseClient
     .from('reflections')
     .select('*')
     .eq('user_id', state.currentUser.id)
     .order('date', { ascending: false });
-  if (error) { console.error('Failed to load history:', error); return; }
-
+  if (error) return console.error('Failed to load history:', error);
   state.history = (data || []).map(h => ({
     date: h.date,
-    timestamp: new Date(h.created_at).getTime(),
-    total: h.total,
-    completed: h.completed,
-    rate: h.rate,
-    energy: h.energy,
-    focus: h.focus,
-    note: h.note,
-    categories: h.categories,
+    timestamp: h.created_at ? new Date(h.created_at).getTime() : Date.now(),
+    total: h.total || 0,
+    completed: h.completed || 0,
+    rate: Number(h.rate || 0),
+    energy: Number(h.energy || 0),
+    focus: Number(h.focus || 0),
+    note: h.note || '',
+    categories: h.categories || {}
   }));
 }
 
-// --- Theme ---
-function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  state.theme = theme;
-  localStorage.setItem('v-theme', theme);
+function attachEventListeners() {
+  els.addBtn?.addEventListener('click', handleAdd);
+  els.taskInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAdd(); });
+  els.selectTrigger?.addEventListener('click', (e) => { e.stopPropagation(); els.categorySelect?.classList.toggle('open'); });
+  els.selectOptions?.querySelectorAll('.select-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      state.selectedCategory = opt.dataset.value;
+      els.selectLabel.textContent = opt.textContent;
+      els.categorySelect.classList.remove('open');
+    });
+  });
+  document.addEventListener('click', () => els.categorySelect?.classList.remove('open'));
+  document.querySelectorAll('.view-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
+  document.querySelectorAll('.period-btn').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.analyticsPeriod = btn.dataset.period === 'all' ? 9999 : parseInt(btn.dataset.period, 10);
+    renderAnalytics();
+  }));
+  els.themeToggle?.addEventListener('click', () => applyTheme(state.theme === 'dark' ? 'light' : 'dark'));
+  els.reflectBtn?.addEventListener('click', openReflection);
+  els.reflectClose?.addEventListener('click', closeReflection);
+  els.reflectModal?.addEventListener('click', (e) => { if (e.target === els.reflectModal) closeReflection(); });
+  els.energySlider?.addEventListener('input', () => { els.energyVal.textContent = els.energySlider.value; });
+  els.focusSlider?.addEventListener('input', () => { els.focusVal.textContent = els.focusSlider.value; });
+  els.reflectSave?.addEventListener('click', saveReflection);
+  els.copyToTodayBtn?.addEventListener('click', () => { if (selectedHistoryDate) copyDayToToday(selectedHistoryDate); });
+  $('logout-btn')?.addEventListener('click', () => { if (confirm('Log out?')) logout(); });
+  document.addEventListener('keydown', (e) => {
+    if (document.activeElement?.matches('input, textarea')) return;
+    if ($('auth-screen')?.style.display !== 'none') return;
+    if (e.key === 'n') { e.preventDefault(); els.taskInput?.focus(); }
+    if (e.key === 'Escape' && els.reflectModal?.classList.contains('open')) closeReflection();
+  });
+  els.aiSuggestBtn?.addEventListener('click', handleAISuggest);
+}
 
-  if (theme === 'dark') {
-    themeIcon.innerHTML = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>';
-  } else {
-    themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
-  }
-
+function renderAll() {
+  renderDate();
+  renderTasks();
+  renderTimeline();
+  renderStats();
+  if (state.currentView === 'history') renderHistoryList();
   if (state.currentView === 'analytics') renderAnalytics();
 }
 
-// --- Events ---
-function attachEventListeners() {
-  addBtn.addEventListener('click', handleAdd);
-  taskInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleAdd();
-  });
-
-  // Copy past day to today
-  const copyBtn = document.getElementById('copy-to-today-btn');
-  if (copyBtn) {
-    copyBtn.addEventListener('click', () => copyDayToToday(selectedHistoryDate));
-  }
-
-  const logoutBtn = document.getElementById('logout-btn');
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', () => {
-      if (confirm('Log out?')) logout();
-    });
-  }
-
-  selectTrigger.addEventListener('click', (e) => {
-    e.stopPropagation();
-    categorySelect.classList.toggle('open');
-  });
-  selectOptions.querySelectorAll('.select-option').forEach(opt => {
-    opt.addEventListener('click', () => {
-      state.selectedCategory = opt.dataset.value;
-      selectLabel.textContent = opt.textContent;
-      categorySelect.classList.remove('open');
-    });
-  });
-  document.addEventListener('click', () => categorySelect.classList.remove('open'));
-
-  document.querySelectorAll('.view-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchView(btn.dataset.view));
-  });
-
-  themeToggle.addEventListener('click', () => {
-    applyTheme(state.theme === 'dark' ? 'light' : 'dark');
-  });
-
-  reflectBtn.addEventListener('click', openReflection);
-
-  reflectClose.addEventListener('click', closeReflection);
-  reflectModal.addEventListener('click', (e) => {
-    if (e.target === reflectModal) closeReflection();
-  });
-  energySlider.addEventListener('input', () => energyVal.textContent = energySlider.value);
-  focusSlider.addEventListener('input', () => focusVal.textContent = focusSlider.value);
-  reflectSave.addEventListener('click', saveReflection);
-
-  document.querySelectorAll('.period-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.analyticsPeriod = btn.dataset.period === 'all' ? 9999 : parseInt(btn.dataset.period);
-      renderAnalytics();
-    });
-  });
-
-  document.addEventListener('keydown', (e) => {
-    const tag = document.activeElement?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-    if (document.getElementById('auth-screen')?.style.display !== 'none') return;
-
-    if (e.key === 'n') {
-      e.preventDefault();
-      taskInput.focus();
-    }
-    if (e.key === 'Escape') {
-      if (reflectModal.classList.contains('open')) closeReflection();
-    }
-  });
-}
-
-// --- View switching ---
 function switchView(view) {
   state.currentView = view;
-  document.querySelectorAll('.view-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.view === view);
-  });
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  $('view-' + view).classList.add('active');
-
-  if (view === 'analytics') renderAnalytics();
+  $('view-' + view)?.classList.add('active');
   if (view === 'history') renderHistoryList();
+  if (view === 'analytics') renderAnalytics();
 }
 
-// --- Date / time ---
 function renderDate() {
   const now = new Date();
-  dateDisplay.textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  nowTime.textContent = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  els.dateDisplay.textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  els.nowTime.textContent = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-// --- Task CRUD (cloud) ---
-async function handleAdd() {
-  const text = taskInput.value.trim();
-  if (!text || !state.currentUser) return;
+function applyTheme(theme) {
+  state.theme = theme;
+  document.documentElement.setAttribute('data-theme', theme);
+  els.themeIcon.innerHTML = theme === 'dark'
+    ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>'
+    : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  if (state.currentView === 'analytics') renderAnalytics();
+}
 
+async function handleAdd() {
+  const text = els.taskInput.value.trim();
+  if (!text || !state.currentUser) return;
   const { data, error } = await supabaseClient
     .from('tasks')
-    .insert({
-      user_id: state.currentUser.id,
-      text,
-      category: state.selectedCategory,
-      completed: false,
-      date: todayDate(),
-    })
+    .insert({ user_id: state.currentUser.id, text, category: state.selectedCategory, completed: false, date: todayDate() })
     .select()
     .single();
-
-  if (error) { console.error('Add failed:', error); return; }
-
+  if (error) return console.error('Add failed:', error);
   state.tasks.push({
     id: data.id,
     text: data.text,
     category: data.category,
-    completed: data.completed,
-    scheduledHour: data.scheduled_hour,
+    completed: !!data.completed,
+    scheduledHour: Number.isInteger(data.scheduled_hour) ? data.scheduled_hour : null,
     createdAt: new Date(data.created_at).getTime(),
+    completedAt: data.completed_at ? new Date(data.completed_at).getTime() : null
   });
-
-  renderTasks();
-  renderStats();
-  taskInput.value = '';
-  taskInput.focus();
-}
-
-async function toggleTask(id) {
-  const task = state.tasks.find(t => t.id === id);
-  if (!task) return;
-
-  const newCompleted = !task.completed;
-  const { error } = await supabaseClient
-    .from('tasks')
-    .update({
-      completed: newCompleted,
-      completed_at: newCompleted ? new Date().toISOString() : null,
-    })
-    .eq('id', id);
-
-  if (error) { console.error('Toggle failed:', error); return; }
-
-  task.completed = newCompleted;
-  if (newCompleted) task.completedAt = Date.now();
+  els.taskInput.value = '';
+  els.taskInput.focus();
   renderTasks();
   renderTimeline();
   renderStats();
-  checkStreak();
+}
+
+async function toggleTask(id) {
+  const task = state.tasks.find(t => String(t.id) === String(id));
+  if (!task) return;
+  const newCompleted = !task.completed;
+  const { error } = await supabaseClient
+    .from('tasks')
+    .update({ completed: newCompleted, completed_at: newCompleted ? new Date().toISOString() : null })
+    .eq('id', id);
+  if (error) return console.error('Toggle failed:', error);
+  task.completed = newCompleted;
+  task.completedAt = newCompleted ? Date.now() : null;
+  renderTasks();
+  renderTimeline();
+  renderStats();
+  await checkStreak();
 }
 
 async function deleteTask(id) {
   const { error } = await supabaseClient.from('tasks').delete().eq('id', id);
-  if (error) { console.error('Delete failed:', error); return; }
-  state.tasks = state.tasks.filter(t => t.id !== id);
+  if (error) return console.error('Delete failed:', error);
+  state.tasks = state.tasks.filter(t => String(t.id) !== String(id));
   renderTasks();
   renderTimeline();
   renderStats();
 }
 
 async function scheduleTask(id, hour) {
-  const { error } = await supabaseClient
-    .from('tasks')
-    .update({ scheduled_hour: hour })
-    .eq('id', id);
-  if (error) { console.error('Schedule failed:', error); return; }
-  const task = state.tasks.find(t => t.id === id);
+  const { error } = await supabaseClient.from('tasks').update({ scheduled_hour: hour }).eq('id', id);
+  if (error) return console.error('Schedule failed:', error);
+  const task = state.tasks.find(t => String(t.id) === String(id));
   if (task) task.scheduledHour = hour;
-  renderTimeline();
   renderTasks();
+  renderTimeline();
 }
 
 async function unscheduleTask(id) {
-  const { error } = await supabaseClient
-    .from('tasks')
-    .update({ scheduled_hour: null })
-    .eq('id', id);
-  if (error) { console.error('Unschedule failed:', error); return; }
-  const task = state.tasks.find(t => t.id === id);
+  const { error } = await supabaseClient.from('tasks').update({ scheduled_hour: null }).eq('id', id);
+  if (error) return console.error('Unschedule failed:', error);
+  const task = state.tasks.find(t => String(t.id) === String(id));
   if (task) task.scheduledHour = null;
-  renderTimeline();
   renderTasks();
+  renderTimeline();
 }
 
-// --- Streak ---
 async function checkStreak() {
   const today = todayDate();
   const allDone = state.tasks.length > 0 && state.tasks.every(t => t.completed);
-
-  if (allDone && state.lastCompleteDate !== today) {
-    state.streak++;
-    state.longestStreak = Math.max(state.longestStreak, state.streak);
-    state.lastCompleteDate = today;
-
-    await supabaseClient
-      .from('profiles')
-      .update({
-        streak: state.streak,
-        longest_streak: state.longestStreak,
-        last_complete_date: today,
-      })
-      .eq('id', state.currentUser.id);
-
-    renderStats();
-  }
+  if (!allDone || state.lastCompleteDate === today || !state.currentUser) return;
+  state.streak += 1;
+  state.longestStreak = Math.max(state.longestStreak, state.streak);
+  state.lastCompleteDate = today;
+  const { error } = await supabaseClient
+    .from('profiles')
+    .update({ streak: state.streak, longest_streak: state.longestStreak, last_complete_date: today })
+    .eq('id', state.currentUser.id);
+  if (error) console.error('Streak update failed:', error);
+  renderStats();
 }
 
-// --- Reflection ---
 function openReflection() {
   const total = state.tasks.length;
   const done = state.tasks.filter(t => t.completed).length;
-  const rate = total === 0 ? 0 : Math.round((done / total) * 100);
-
-  reflectDone.textContent = done;
-  reflectTotal.textContent = total;
-  reflectRate.textContent = rate;
-
-  energySlider.value = 5;
-  focusSlider.value = 5;
-  energyVal.textContent = '5';
-  focusVal.textContent = '5';
-  reflectNote.value = '';
-
-  reflectModal.classList.add('open');
+  const rate = total ? Math.round((done / total) * 100) : 0;
+  els.reflectDone.textContent = done;
+  els.reflectTotal.textContent = total;
+  els.reflectRate.textContent = rate;
+  els.energySlider.value = 5;
+  els.focusSlider.value = 5;
+  els.energyVal.textContent = '5';
+  els.focusVal.textContent = '5';
+  els.reflectNote.value = '';
+  els.aiInsightArea.style.display = 'none';
+  els.reflectModal.classList.add('open');
 }
 
 function closeReflection() {
-  reflectModal.classList.remove('open');
+  els.reflectModal.classList.remove('open');
 }
 
 async function saveReflection() {
   if (!state.currentUser) return;
-
-  const today = todayDate();
   const total = state.tasks.length;
   const done = state.tasks.filter(t => t.completed).length;
-
   const categoryBreakdown = { focus: 0, health: 0, learn: 0, build: 0, rest: 0 };
-  state.tasks.forEach(t => {
-    if (t.completed && categoryBreakdown.hasOwnProperty(t.category)) {
-      categoryBreakdown[t.category]++;
-    }
-  });
-
+  state.tasks.forEach(t => { if (t.completed && categoryBreakdown[t.category] !== undefined) categoryBreakdown[t.category] += 1; });
   const reflection = {
     user_id: state.currentUser.id,
-    date: today,
+    date: todayDate(),
     total,
     completed: done,
-    rate: total === 0 ? 0 : done / total,
-    energy: parseInt(energySlider.value),
-    focus: parseInt(focusSlider.value),
-    note: reflectNote.value.trim(),
-    categories: categoryBreakdown,
+    rate: total ? done / total : 0,
+    energy: parseInt(els.energySlider.value, 10),
+    focus: parseInt(els.focusSlider.value, 10),
+    note: els.reflectNote.value.trim(),
+    categories: categoryBreakdown
   };
-
-  const { error } = await supabaseClient
-    .from('reflections')
-    .upsert(reflection, { onConflict: 'user_id,date' });
-
-  if (error) { console.error('Save reflection failed:', error); return; }
-
-  state.history = state.history.filter(h => h.date !== today);
-  state.history.unshift({
-    date: today,
-    timestamp: Date.now(),
-    total,
-    completed: done,
-    rate: reflection.rate,
-    energy: reflection.energy,
-    focus: reflection.focus,
-    note: reflection.note,
-    categories: categoryBreakdown,
-  });
-
-  // Show AI insight before closing
-await showReflectionInsight();
-
-// Close after a few seconds
-setTimeout(() => {
-  closeReflection();
-  // Reset insight for next time
-  const insightArea = document.getElementById('ai-insight-area');
-  if (insightArea) insightArea.style.display = 'none';
-}, 8000);
-
-  reflectBtn.style.animation = 'none';
-  void reflectBtn.offsetWidth;
-  reflectBtn.style.animation = 'slide-in 0.5s ease';
+  const { error } = await supabaseClient.from('reflections').upsert(reflection, { onConflict: 'user_id,date' });
+  if (error) return console.error('Save reflection failed:', error);
+  state.history = state.history.filter(h => h.date !== reflection.date);
+  state.history.unshift({ ...reflection, timestamp: Date.now() });
+  await showReflectionInsight();
+  renderAnalytics();
+  setTimeout(() => {
+    closeReflection();
+    els.aiInsightArea.style.display = 'none';
+  }, 4000);
 }
 
-// --- Rendering: Today ---
 function renderTasks() {
-  taskList.innerHTML = '';
-
+  els.taskList.innerHTML = '';
   if (state.tasks.length === 0) {
-    emptyState.classList.remove('hidden');
+    els.emptyState.classList.remove('hidden');
     return;
   }
-  emptyState.classList.add('hidden');
-
+  els.emptyState.classList.add('hidden');
   state.tasks.forEach(task => {
     const li = document.createElement('li');
     li.className = 'task-item' + (task.completed ? ' completed' : '');
     li.draggable = true;
     li.dataset.id = task.id;
-
     li.innerHTML = `
       <div class="task-category-dot ${task.category}"></div>
       <div class="task-checkbox ${task.completed ? 'checked' : ''}"></div>
       <span class="task-text">${escapeHtml(task.text)}</span>
       ${task.scheduledHour !== null ? `<span class="task-time">${formatHour(task.scheduledHour)}</span>` : ''}
-      <button class="delete-btn" title="Delete">✕</button>
-    `;
-
+      <button class="delete-btn" type="button" title="Delete">✕</button>`;
     li.querySelector('.task-checkbox').addEventListener('click', () => toggleTask(task.id));
-    li.querySelector('.delete-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteTask(task.id);
-    });
-
-    li.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', task.id);
-      li.classList.add('dragging');
-    });
+    li.querySelector('.delete-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteTask(task.id); });
+    li.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', String(task.id)); li.classList.add('dragging'); });
     li.addEventListener('dragend', () => li.classList.remove('dragging'));
-
-    taskList.appendChild(li);
+    els.taskList.appendChild(li);
   });
 }
 
 function renderStats() {
   const total = state.tasks.length;
   const done = state.tasks.filter(t => t.completed).length;
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-
-  streakCount.textContent = state.streak;
-  completedCount.textContent = done;
-  totalCount.textContent = total;
-  progressPercent.textContent = pct;
-  progressBar.style.width = pct + '%';
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  els.streakCount.textContent = state.streak;
+  els.completedCount.textContent = done;
+  els.totalCount.textContent = total;
+  els.progressPercent.textContent = pct;
+  els.progressBar.style.width = pct + '%';
 }
 
 function renderTimeline() {
-  const now = new Date();
-  const currentHour = now.getHours();
-
-  timelineContainer.innerHTML = '';
-
-  for (let hour = 0; hour <= 23; hour++) {
+  els.timelineContainer.innerHTML = '';
+  const currentHour = new Date().getHours();
+  for (let hour = 0; hour < 24; hour += 1) {
     const block = document.createElement('div');
     block.className = 'hour-block';
-
     const label = document.createElement('div');
     label.className = 'hour-label';
     label.textContent = formatHour(hour);
-
     const slot = document.createElement('div');
     slot.className = 'hour-slot' + (hour === currentHour ? ' is-now' : '');
     slot.dataset.hour = hour;
-
-    const scheduledHere = state.tasks.filter(t => t.scheduledHour === hour);
-    scheduledHere.forEach(task => {
+    state.tasks.filter(t => t.scheduledHour === hour).forEach(task => {
       const div = document.createElement('div');
       div.className = 'scheduled-task ' + task.category + (task.completed ? ' completed' : '');
-      div.innerHTML = `
-        <div class="task-category-dot ${task.category}"></div>
-        <span>${escapeHtml(task.text)}</span>
-        <button class="scheduled-remove" title="Unschedule">✕</button>
-      `;
+      div.innerHTML = `<div class="task-category-dot ${task.category}"></div><span>${escapeHtml(task.text)}</span><button class="scheduled-remove" type="button" title="Unschedule">✕</button>`;
       div.querySelector('.scheduled-remove').addEventListener('click', () => unscheduleTask(task.id));
       slot.appendChild(div);
     });
-
-    slot.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      slot.classList.add('drag-over');
-    });
+    slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('drag-over'); });
     slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
     slot.addEventListener('drop', (e) => {
       e.preventDefault();
@@ -574,43 +459,25 @@ function renderTimeline() {
       const id = e.dataTransfer.getData('text/plain');
       scheduleTask(id, hour);
     });
-
     block.appendChild(label);
     block.appendChild(slot);
-    timelineContainer.appendChild(block);
-  }
-
-  const nowSlot = timelineContainer.querySelector('.is-now');
-  if (nowSlot) {
-    setTimeout(() => nowSlot.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+    els.timelineContainer.appendChild(block);
   }
 }
 
 function renderAnalytics() {
   const period = state.analyticsPeriod;
-  const cutoff = Date.now() - (period * 24 * 60 * 60 * 1000);
-  const filtered = period === 9999
-    ? state.history
-    : state.history.filter(h => h.timestamp >= cutoff);
-
-  // state.history is newest-first (descending). For charts, reverse to get oldest-first (left → right).
+  const cutoff = Date.now() - period * 24 * 60 * 60 * 1000;
+  const filtered = period === 9999 ? state.history : state.history.filter(h => h.timestamp >= cutoff);
   const chartData = [...filtered].reverse();
-
   const hasData = filtered.length > 0;
-  $('analytics-empty').classList.toggle('visible', !hasData);
-
-  // Summary cards
-  const totalCompleted = filtered.reduce((sum, h) => sum + h.completed, 0);
+  els.analyticsEmpty.classList.toggle('visible', !hasData);
+  $('summary-completed').textContent = filtered.reduce((sum, h) => sum + h.completed, 0);
   const totalTasks = filtered.reduce((sum, h) => sum + h.total, 0);
-  const avgRate = totalTasks === 0 ? 0 : Math.round((totalCompleted / totalTasks) * 100);
-  const avgEnergy = filtered.length === 0 ? '—' : (filtered.reduce((s, h) => s + h.energy, 0) / filtered.length).toFixed(1);
-
-  $('summary-completed').textContent = totalCompleted;
-  $('summary-rate').textContent = avgRate + '%';
-  $('summary-energy').textContent = avgEnergy;
+  const totalCompleted = filtered.reduce((sum, h) => sum + h.completed, 0);
+  $('summary-rate').textContent = (totalTasks ? Math.round((totalCompleted / totalTasks) * 100) : 0) + '%';
+  $('summary-energy').textContent = filtered.length ? (filtered.reduce((s, h) => s + h.energy, 0) / filtered.length).toFixed(1) : '—';
   $('summary-streak').textContent = state.longestStreak;
-
-  // Charts use chartData (oldest → newest). Doughnut doesn't care about order.
   renderChartCompletion(chartData);
   renderChartCategory(filtered);
   renderChartEnergy(chartData);
@@ -625,160 +492,90 @@ function getChartColors() {
     accent2: styles.getPropertyValue('--accent-2').trim(),
     accent3: styles.getPropertyValue('--accent-3').trim(),
     accent4: styles.getPropertyValue('--accent-4').trim(),
-    accent5: styles.getPropertyValue('--accent-5').trim(),
+    accent5: styles.getPropertyValue('--accent-5').trim()
   };
-}
-
-function renderChartCompletion(history) {
-  const ctx = $('chart-completion').getContext('2d');
-  const colors = getChartColors();
-  const labels = history.map(h => new Date(h.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-  const data = history.map(h => h.completed);
-
-  if (chartCompletion) chartCompletion.destroy();
-  chartCompletion = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Completed',
-        data,
-        backgroundColor: colors.accent1 + 'cc',
-        borderRadius: 6,
-      }],
-    },
-    options: chartBaseOptions(colors),
-  });
-}
-
-function renderChartCategory(history) {
-  const ctx = $('chart-category').getContext('2d');
-  const colors = getChartColors();
-
-  const totals = { focus: 0, health: 0, learn: 0, build: 0, rest: 0 };
-  history.forEach(h => {
-    Object.keys(totals).forEach(k => totals[k] += (h.categories?.[k] || 0));
-  });
-
-  if (chartCategory) chartCategory.destroy();
-  chartCategory = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: ['Focus', 'Health', 'Learn', 'Build', 'Rest'],
-      datasets: [{
-        data: [totals.focus, totals.health, totals.learn, totals.build, totals.rest],
-        backgroundColor: [colors.accent1, colors.accent3, colors.accent2, colors.accent4, colors.accent5],
-        borderWidth: 0,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: '65%',
-      plugins: {
-        legend: {
-          position: 'right',
-          labels: { color: colors.text, font: { family: 'Inter' } },
-        },
-      },
-    },
-  });
-}
-
-function renderChartEnergy(history) {
-  const ctx = $('chart-energy').getContext('2d');
-  const colors = getChartColors();
-  const labels = history.map(h => new Date(h.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-
-  if (chartEnergy) chartEnergy.destroy();
-  chartEnergy = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Energy',
-          data: history.map(h => h.energy),
-          borderColor: colors.accent4,
-          backgroundColor: colors.accent4 + '22',
-          tension: 0.35,
-          pointRadius: 4,
-          pointBackgroundColor: colors.accent4,
-        },
-        {
-          label: 'Focus',
-          data: history.map(h => h.focus),
-          borderColor: colors.accent1,
-          backgroundColor: colors.accent1 + '22',
-          tension: 0.35,
-          pointRadius: 4,
-          pointBackgroundColor: colors.accent1,
-        },
-      ],
-    },
-    options: {
-      ...chartBaseOptions(colors),
-      scales: {
-        ...chartBaseOptions(colors).scales,
-        y: { ...chartBaseOptions(colors).scales.y, min: 0, max: 10 },
-      },
-    },
-  });
 }
 
 function chartBaseOptions(colors) {
   return {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: {
-      legend: { labels: { color: colors.text, font: { family: 'Inter' } } },
-    },
+    plugins: { legend: { labels: { color: colors.text } } },
     scales: {
       x: { ticks: { color: colors.text }, grid: { color: colors.grid } },
-      y: { ticks: { color: colors.text }, grid: { color: colors.grid }, beginAtZero: true },
-    },
+      y: { ticks: { color: colors.text }, grid: { color: colors.grid }, beginAtZero: true }
+    }
   };
 }
 
-// --- Rendering: History ---
-let selectedHistoryDate = null;
+function renderChartCompletion(history) {
+  const canvas = $('chart-completion');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const colors = getChartColors();
+  if (chartCompletion) chartCompletion.destroy();
+  chartCompletion = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: history.map(h => new Date(h.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+      datasets: [{ label: 'Completed', data: history.map(h => h.completed), backgroundColor: colors.accent1 + 'cc', borderRadius: 8 }]
+    },
+    options: chartBaseOptions(colors)
+  });
+}
+
+function renderChartCategory(history) {
+  const canvas = $('chart-category');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const colors = getChartColors();
+  const totals = { focus: 0, health: 0, learn: 0, build: 0, rest: 0 };
+  history.forEach(h => Object.keys(totals).forEach(k => { totals[k] += h.categories?.[k] || 0; }));
+  if (chartCategory) chartCategory.destroy();
+  chartCategory = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Focus', 'Health', 'Learn', 'Build', 'Rest'],
+      datasets: [{ data: [totals.focus, totals.health, totals.learn, totals.build, totals.rest], backgroundColor: [colors.accent1, colors.accent3, colors.accent2, colors.accent4, colors.accent5], borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'right', labels: { color: colors.text } } } }
+  });
+}
+
+function renderChartEnergy(history) {
+  const canvas = $('chart-energy');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const colors = getChartColors();
+  if (chartEnergy) chartEnergy.destroy();
+  chartEnergy = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: history.map(h => new Date(h.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+      datasets: [
+        { label: 'Energy', data: history.map(h => h.energy), borderColor: colors.accent4, backgroundColor: colors.accent4 + '22', tension: .35, pointRadius: 4 },
+        { label: 'Focus', data: history.map(h => h.focus), borderColor: colors.accent1, backgroundColor: colors.accent1 + '22', tension: .35, pointRadius: 4 }
+      ]
+    },
+    options: { ...chartBaseOptions(colors), scales: { ...chartBaseOptions(colors).scales, y: { ...chartBaseOptions(colors).scales.y, min: 0, max: 10 } } }
+  });
+}
 
 function renderHistoryList() {
-  const listEl = $('history-list');
-  const emptyEl = $('history-list-empty');
-
-  if (state.history.length === 0) {
-    listEl.innerHTML = '';
-    emptyEl.classList.remove('hidden');
+  els.historyList.innerHTML = '';
+  if (!state.history.length) {
+    els.historyListEmpty.classList.remove('hidden');
     return;
   }
-  emptyEl.classList.add('hidden');
-
-  listEl.innerHTML = '';
-
+  els.historyListEmpty.classList.add('hidden');
   state.history.forEach(day => {
     const li = document.createElement('li');
     li.className = 'history-day' + (day.date === selectedHistoryDate ? ' active' : '');
-
     const pct = Math.round((day.rate || 0) * 100);
-    const dateObj = new Date(day.date);
-    const dateLabel = dateObj.toLocaleDateString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric'
-    });
-
-    li.innerHTML = `
-      <div class="history-day-date">${dateLabel}</div>
-      <div class="history-day-meta">
-        <span>${day.completed}/${day.total}</span>
-        <div class="history-day-bar">
-          <div class="history-day-bar-fill" style="width: ${pct}%"></div>
-        </div>
-        <span>${pct}%</span>
-      </div>
-    `;
-
+    const dateLabel = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    li.innerHTML = `<div class="history-day-date">${dateLabel}</div><div class="history-day-meta"><span>${day.completed}/${day.total}</span><div class="history-day-bar"><div class="history-day-bar-fill" style="width:${pct}%"></div></div><span>${pct}%</span></div>`;
     li.addEventListener('click', () => selectHistoryDay(day.date));
-    listEl.appendChild(li);
+    els.historyList.appendChild(li);
   });
 }
 
@@ -790,109 +587,39 @@ async function selectHistoryDay(date) {
 
 async function renderHistoryDetail(date) {
   const day = state.history.find(h => h.date === date);
-  if (!day) return;
-
-  const dateObj = new Date(date);
-  const dateLabel = dateObj.toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric'
-  });
+  if (!day || !state.currentUser) return;
   const pct = Math.round((day.rate || 0) * 100);
-
-  $('history-detail-date').textContent = dateLabel;
-  $('history-detail-summary').textContent =
-    `Completed ${day.completed} of ${day.total} tasks · ${pct}%`;
-  $('copy-to-today-btn').style.display = '';
-
+  els.historyDetailDate.textContent = new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  els.historyDetailSummary.textContent = `Completed ${day.completed} of ${day.total} tasks · ${pct}%`;
+  els.copyToTodayBtn.classList.remove('hidden');
   const { data: tasks, error } = await supabaseClient
     .from('tasks')
     .select('*')
     .eq('user_id', state.currentUser.id)
     .eq('date', date)
     .order('created_at', { ascending: true });
-
-  if (error) { console.error('Failed to load past tasks:', error); return; }
-
-  const body = $('history-detail-body');
-  body.innerHTML = `
+  if (error) return console.error('Failed to load past tasks:', error);
+  els.historyDetailBody.innerHTML = `
     <div class="history-stats">
-      <div class="history-stat">
-        <div class="history-stat-label">Tasks</div>
-        <div class="history-stat-value">${day.completed}/${day.total}</div>
-      </div>
-      <div class="history-stat">
-        <div class="history-stat-label">Rate</div>
-        <div class="history-stat-value">${pct}%</div>
-      </div>
-      <div class="history-stat">
-        <div class="history-stat-label">Energy</div>
-        <div class="history-stat-value">${day.energy}/10</div>
-      </div>
-      <div class="history-stat">
-        <div class="history-stat-label">Focus</div>
-        <div class="history-stat-value">${day.focus}/10</div>
-      </div>
+      <div class="history-stat"><div class="history-stat-label">Tasks</div><div class="history-stat-value">${day.completed}/${day.total}</div></div>
+      <div class="history-stat"><div class="history-stat-label">Rate</div><div class="history-stat-value">${pct}%</div></div>
+      <div class="history-stat"><div class="history-stat-label">Energy</div><div class="history-stat-value">${day.energy}/10</div></div>
+      <div class="history-stat"><div class="history-stat-label">Focus</div><div class="history-stat-value">${day.focus}/10</div></div>
     </div>
-
-    ${(tasks && tasks.length > 0) ? `
-      <div>
-        <div class="history-section-title">Tasks that day</div>
-        <ul class="history-task-list">
-          ${tasks.map(t => `
-            <li class="history-task ${t.completed ? 'was-completed' : ''}">
-              <div class="task-category-dot ${t.category}"></div>
-              <span>${escapeHtml(t.text)}</span>
-            </li>
-          `).join('')}
-        </ul>
-      </div>
-    ` : ''}
-
-    ${day.note ? `
-      <div>
-        <div class="history-section-title">Reflection note</div>
-        <div class="history-note">"${escapeHtml(day.note)}"</div>
-      </div>
-    ` : ''}
-  `;
+    ${(tasks && tasks.length) ? `<div><div class="history-section-title">Tasks that day</div><ul class="task-list">${tasks.map(t => `<li class="history-task ${t.completed ? 'was-completed' : ''}"><div class="task-category-dot ${t.category}"></div><span>${escapeHtml(t.text)}</span></li>`).join('')}</ul></div>` : ''}
+    ${day.note ? `<div><div class="history-section-title">Reflection note</div><div class="history-note">"${escapeHtml(day.note)}"</div></div>` : ''}`;
 }
 
-// --- Copy past day to today ---
 async function copyDayToToday(date) {
   if (!date || !state.currentUser) return;
-
-  if (!confirm('Copy this day\'s tasks to today? This will add them as new uncompleted tasks.')) return;
-
-  // Fetch past tasks
-  const { data: pastTasks, error } = await supabaseClient
-    .from('tasks')
-    .select('*')
-    .eq('user_id', state.currentUser.id)
-    .eq('date', date);
-
-  if (error) { console.error('Copy fetch failed:', error); return; }
-  if (!pastTasks || pastTasks.length === 0) {
-    alert('No tasks to copy from that day.');
-    return;
-  }
-
-  // Create new tasks for today (uncompleted)
+  if (!confirm("Copy this day's tasks to today? This will add them as new uncompleted tasks.")) return;
+  const { data: pastTasks, error } = await supabaseClient.from('tasks').select('*').eq('user_id', state.currentUser.id).eq('date', date);
+  if (error) return console.error('Copy fetch failed:', error);
+  if (!pastTasks?.length) return alert('No tasks to copy from that day.');
   const today = todayDate();
-  const newTasks = pastTasks.map(t => ({
-    user_id: state.currentUser.id,
-    text: t.text,
-    category: t.category,
-    completed: false,
-    scheduled_hour: t.scheduled_hour,
-    date: today,
-  }));
-
-  const { error: insertError } = await supabaseClient
-    .from('tasks')
-    .insert(newTasks);
-
-  if (insertError) { console.error('Copy insert failed:', insertError); return; }
-
-  // Reload today's tasks and switch view
+  const newTasks = pastTasks.map(t => ({ user_id: state.currentUser.id, text: t.text, category: t.category, completed: false, scheduled_hour: t.scheduled_hour, date: today }));
+  const { error: insertError } = await supabaseClient.from('tasks').insert(newTasks);
+  if (insertError) return console.error('Copy insert failed:', insertError);
   await loadTasks();
   renderTasks();
   renderTimeline();
@@ -900,129 +627,59 @@ async function copyDayToToday(date) {
   switchView('today');
 }
 
-// --- Re-sync data when tab regains focus ---
-document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState === 'visible' && state.currentUser) {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) return;
-
-    // Always reload data when tab becomes visible — keeps multiple devices in sync
-    await loadAllData();
-    renderTasks();
-    renderTimeline();
-    renderStats();
-    if (state.currentView === 'history') renderHistoryList();
-    if (state.currentView === 'analytics') renderAnalytics();
+async function callAI(mode, payload = {}) {
+  try {
+    const { data, error } = await supabaseClient.functions.invoke('ai-suggest', {
+      body: { mode, tasks: state.tasks, history: state.history, currentHour: new Date().getHours(), ...payload }
+    });
+    if (error) throw error;
+    return data?.suggestion || null;
+  } catch (error) {
+    console.error('AI call failed:', error);
+    return null;
   }
-});
-
-// Also poll for updates every 30 seconds when tab is active (multi-device sync)
-setInterval(async () => {
-  if (document.visibilityState === 'visible' && state.currentUser) {
-    await loadTasks();
-    renderTasks();
-    renderTimeline();
-    renderStats();
-  }
-}, 30 * 1000);
-
-// --- Helpers ---
-function formatHour(hour) {
-  const h = hour % 12 || 12;
-  const ampm = hour < 12 ? 'AM' : 'PM';
-  return `${h}:00 ${ampm}`;
 }
 
-function escapeHtml(str) {
+async function handleAISuggest() {
+  if (!state.currentUser) return;
+  els.aiSuggestBtn.disabled = true;
+  els.aiSuggestLabel.textContent = 'Thinking...';
+  const suggestion = await callAI('next-action');
+  els.aiSuggestBtn.disabled = false;
+  els.aiSuggestLabel.textContent = 'Suggest';
+  showAISuggestion(suggestion || "Couldn't reach the AI right now. Try again in a moment.");
+}
+
+function showAISuggestion(text) {
+  document.querySelector('.ai-suggestion-popup')?.remove();
+  const focusCard = document.querySelector('.col-left .glass-card');
+  if (!focusCard) return;
+  const popup = document.createElement('div');
+  popup.className = 'ai-suggestion-popup';
+  popup.innerHTML = `${escapeHtml(text)}<button class="ai-suggestion-close" type="button" title="Dismiss">✕</button>`;
+  popup.querySelector('.ai-suggestion-close').addEventListener('click', () => popup.remove());
+  focusCard.appendChild(popup);
+  setTimeout(() => popup.remove(), 30000);
+}
+
+async function showReflectionInsight() {
+  if (!els.aiInsightArea || !els.aiInsightText) return;
+  els.aiInsightArea.style.display = 'block';
+  els.aiInsightText.textContent = 'Thinking about your day...';
+  const insight = await callAI('insight');
+  if (insight) els.aiInsightText.textContent = insight;
+  else els.aiInsightArea.style.display = 'none';
+}
+
+function formatHour(hour) {
+  const h = hour % 12 || 12;
+  return `${h}:00 ${hour < 12 ? 'AM' : 'PM'}`;
+}
+
+function escapeHtml(str = '') {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
 }
 
-// ============================================
-// AI INTEGRATION
-// ============================================
-
-async function callAI(mode, payload = {}) {
-  const { data, error } = await supabaseClient.functions.invoke('ai-suggest', {
-    body: {
-      mode,
-      tasks: state.tasks,
-      history: state.history,
-      currentHour: new Date().getHours(),
-      ...payload,
-    },
-  });
-
-  if (error) {
-    console.error('AI call failed:', error);
-    return null;
-  }
-  return data?.suggestion || null;
-}
-
-// --- Suggest next action ---
-const aiSuggestBtn = document.getElementById('ai-suggest-btn');
-const aiSuggestLabel = document.getElementById('ai-suggest-label');
-
-if (aiSuggestBtn) {
-  aiSuggestBtn.addEventListener('click', async () => {
-    if (!state.currentUser) return;
-
-    aiSuggestBtn.disabled = true;
-    aiSuggestLabel.textContent = 'Thinking...';
-
-    const suggestion = await callAI('next-action');
-
-    aiSuggestBtn.disabled = false;
-    aiSuggestLabel.textContent = 'Suggest';
-
-    if (suggestion) {
-      showAISuggestion(suggestion);
-    } else {
-      showAISuggestion("Couldn't reach the AI right now. Try again in a moment.");
-    }
-  });
-}
-
-function showAISuggestion(text) {
-  // Remove any existing popup
-  const existing = document.querySelector('.ai-suggestion-popup');
-  if (existing) existing.remove();
-
-  // Find the focus card and append the suggestion
-  const focusCard = document.querySelector('.col-left .glass-card');
-  if (!focusCard) return;
-
-  const popup = document.createElement('div');
-  popup.className = 'ai-suggestion-popup';
-  popup.innerHTML = `
-    ${escapeHtml(text)}
-    <button class="ai-suggestion-close" title="Dismiss">✕</button>
-  `;
-  popup.querySelector('.ai-suggestion-close').addEventListener('click', () => popup.remove());
-
-  focusCard.appendChild(popup);
-
-  // Auto-dismiss after 30 seconds
-  setTimeout(() => {
-    if (popup.parentNode) popup.remove();
-  }, 30000);
-}
-
-// --- AI insight on reflection save ---
-async function showReflectionInsight() {
-  const insightArea = document.getElementById('ai-insight-area');
-  const insightText = document.getElementById('ai-insight-text');
-  if (!insightArea || !insightText) return;
-
-  insightArea.style.display = '';
-  insightText.textContent = 'Thinking about your day...';
-
-  const insight = await callAI('insight');
-  if (insight) {
-    insightText.textContent = insight;
-  } else {
-    insightArea.style.display = 'none';
-  }
-}
+init();
