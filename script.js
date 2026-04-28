@@ -538,7 +538,7 @@ function renderTimeline() {
 
   timelineContainer.innerHTML = '';
 
-  for (let hour = 6; hour <= 23; hour++) {
+  for (let hour = 0; hour <= 23; hour++) {
     const block = document.createElement('div');
     block.className = 'hour-block';
 
@@ -593,6 +593,7 @@ function renderAnalytics() {
   const filtered = period === 9999
     ? state.history
     : state.history.filter(h => h.timestamp >= cutoff);
+  const chartData = [...filtered].reverse(); // oldest → newest for charts
 
   const hasData = filtered.length > 0;
   $('analytics-empty').classList.toggle('visible', !hasData);
@@ -607,9 +608,9 @@ function renderAnalytics() {
   $('summary-energy').textContent = avgEnergy;
   $('summary-streak').textContent = state.longestStreak;
 
-  renderChartCompletion(filtered);
-  renderChartCategory(filtered);
-  renderChartEnergy(filtered);
+  renderChartCompletion(chartData);
+  renderChartCategory(filtered); // doughnut doesn't care about order
+  renderChartEnergy(chartData);
 }
 
 function getChartColors() {

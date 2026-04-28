@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
       const incomplete = (tasks || []).filter((t: any) => !t.completed);
       const completed = (tasks || []).filter((t: any) => t.completed);
 
-      prompt = `You are a thoughtful productivity coach helping a user stay consistent with their daily routine.
+      prompt = `You are a thoughtful productivity coach helping a user stay consistent with their daily routine. Respond with ONLY the suggestion text — no JSON, no labels, no preamble, no Markdown formatting (no asterisks, no bold).
 
 It's currently ${currentHour}:00.
 
@@ -59,7 +59,7 @@ Respond with ONLY the suggestion text — no JSON, no labels, no preamble.`;
 
 ${recent.map((h: any) => `${h.date}: ${h.completed}/${h.total} tasks, energy ${h.energy}/10, focus ${h.focus}/10${h.note ? ` — note: "${h.note}"` : ""}`).join("\n")}
 
-Write ONE specific, encouraging insight (max 2 sentences) that reflects a pattern you noticed. Be warm and specific — not generic. If there's only one day of data, focus on celebrating the start. Respond with ONLY the insight text.`;
+Write ONE specific, encouraging insight (max 2 sentences) that reflects a pattern you noticed. Be warm and specific — not generic. If there's only one day of data, focus on celebrating the start. Respond with ONLY the insight text. No Markdown formatting (no asterisks, no bold, plain prose only)..`;
     } else {
       return new Response(
         JSON.stringify({ error: "Unknown mode" }),
