@@ -18,6 +18,9 @@ const authEls = {
 
 let isSignupMode = false;
 
+// Track the last user ID we bootstrapped so we never double-load for the same session
+let lastBootstrappedUserId = null;
+
 function showApp() {
   authEls.authScreen.style.display = 'none';
   authEls.appShell.style.display = 'block';
@@ -43,23 +46,19 @@ function setAuthMode(signup) {
 async function handleSession(session) {
   if (session?.user) {
     showApp();
-    if (window.visionaryOnSignedIn) {
+    // Only run the full data bootstrap if this is a new/different user session.
+    // This prevents onAuthStateChange + checkAuthState from both triggering a load.
+    if (window.visionaryOnSignedIn && session.user.id !== lastBootstrappedUserId) {
+      lastBootstrappedUserId = session.user.id;
       await window.visionaryOnSignedIn(session.user);
     }
   } else {
+    lastBootstrappedUserId = null;
     showAuth();
     if (window.visionaryOnSignedOut) {
       window.visionaryOnSignedOut();
     }
   }
-}
-
-async function checkAuthState() {
-  const { data: { session }, error } = await supabaseClient.auth.getSession();
-  if (error) {
-    console.error('Session check failed:', error);
-  }
-  await handleSession(session);
 }
 
 async function handleEmailAuth() {
@@ -102,6 +101,7 @@ async function handleEmailAuth() {
 }
 
 async function logout() {
+  lastBootstrappedUserId = null;
   const { error } = await supabaseClient.auth.signOut();
   if (error) {
     console.error('Logout failed:', error);
@@ -111,9 +111,18 @@ window.logout = logout;
 
 function initAuth() {
   setAuthMode(false);
-  checkAuthState();
 
-  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+  // onAuthStateChange is the single source of truth for session state.
+  // It fires immediately with the current session on page load (INITIAL_SESSION event),
+  // which replaces the need for a separate checkAuthState() call.
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    // On sign-out, always reset regardless of lastBootstrappedUserId
+    if (event === 'SIGNED_OUT') {
+      lastBootstrappedUserId = null;
+      showAuth();
+      if (window.visionaryOnSignedOut) window.visionaryOnSignedOut();
+      return;
+    }
     await handleSession(session);
   });
 
