@@ -2,11 +2,14 @@
 // VISIONARY — Cloud-synced (Supabase)
 // ============================================
 
-// --- State ---
-const todayDate = () => new Date().toDateString();
-const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+// --- Helpers ---
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const $ = (id) => document.getElementById(id);
 
+// --- State ---
 const state = {
   tasks: [],
   streak: 0,
@@ -68,6 +71,7 @@ let chartCompletion = null;
 let chartCategory = null;
 let chartEnergy = null;
 
+// --- Date helpers ---
 function parseAppDate(value) {
   if (!value) return null;
   if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
@@ -94,9 +98,22 @@ function sortByAppDateAsc(items = []) {
   });
 }
 
+// --- normalizeTask: single source of truth for mapping a DB row to app state ---
+function normalizeTask(t) {
+  return {
+    id: t.id,
+    text: t.text,
+    category: t.category || 'focus',
+    completed: !!t.completed,
+    scheduledHour: Number.isInteger(t.scheduled_hour) ? t.scheduled_hour : null,
+    createdAt: t.created_at ? new Date(t.created_at).getTime() : Date.now(),
+    completedAt: t.completed_at ? new Date(t.completed_at).getTime() : null
+  };
+}
+
 let selectedHistoryDate = null;
 let currentLoadedDate = todayISO();
-let bootstrapInFlight = null;
+let bootstrapping = false;
 let initialized = false;
 
 function init() {
@@ -106,6 +123,7 @@ function init() {
   renderDate();
   attachEventListeners();
 
+  // Reload data when the calendar day rolls over
   setInterval(async () => {
     renderDate();
     renderTimeline();
@@ -118,6 +136,7 @@ function init() {
     }
   }, 60000);
 
+  // Background refresh every 30s when tab is visible
   setInterval(async () => {
     if (document.visibilityState === 'visible' && state.currentUser) {
       await loadTasks();
@@ -127,6 +146,7 @@ function init() {
     }
   }, 30000);
 
+  // Refresh on tab focus (handles the "blank on return" case)
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible' && state.currentUser) {
       await loadAllData();
@@ -137,23 +157,23 @@ function init() {
   renderAll();
 }
 
-window.visionaryOnSignedIn = async function(user) {
-  state.currentUser = user;
-  currentLoadedDate = todayISO();
-  if (bootstrapInFlight) return bootstrapInFlight;
-  bootstrapInFlight = (async () => {
+// --- Auth bridge ---
+window.visionaryOnSignedIn = async function (user) {
+  // Guard against duplicate auth callbacks firing simultaneously
+  if (bootstrapping) return;
+  bootstrapping = true;
+  try {
+    state.currentUser = user;
+    currentLoadedDate = todayISO();
     await ensureProfile(user.id);
     await loadAllData();
     renderAll();
-  })();
-  try {
-    await bootstrapInFlight;
   } finally {
-    bootstrapInFlight = null;
+    bootstrapping = false;
   }
 };
 
-window.visionaryOnSignedOut = function() {
+window.visionaryOnSignedOut = function () {
   state.currentUser = null;
   state.tasks = [];
   state.history = [];
@@ -164,9 +184,10 @@ window.visionaryOnSignedOut = function() {
   renderAll();
 };
 
+// --- Data loading ---
 async function ensureProfile(userId) {
   const payload = { id: userId, streak: 0, longest_streak: 0, last_complete_date: null };
-  const { error } = await supabaseClient.from('profiles').upsert(payload, { onConflict: 'id' });
+  const { error } = await supabaseClient.from('profiles').upsert(payload, { onConflict: 'id', ignoreDuplicates: true });
   if (error) console.error('Profile bootstrap failed:', error);
 }
 
@@ -185,15 +206,7 @@ async function loadTasks() {
     .eq('date', today)
     .order('created_at', { ascending: true });
   if (error) return console.error('Failed to load tasks:', error);
-  state.tasks = (data || []).map(t => ({
-    id: t.id,
-    text: t.text,
-    category: t.category,
-    completed: !!t.completed,
-    scheduledHour: Number.isInteger(t.scheduled_hour) ? t.scheduled_hour : null,
-    createdAt: t.created_at ? new Date(t.created_at).getTime() : Date.now(),
-    completedAt: t.completed_at ? new Date(t.completed_at).getTime() : null
-  }));
+  state.tasks = (data || []).map(normalizeTask);
 }
 
 async function loadProfile() {
@@ -230,6 +243,7 @@ async function loadHistory() {
   }));
 }
 
+// --- Event listeners ---
 function attachEventListeners() {
   els.addBtn?.addEventListener('click', handleAdd);
   els.taskInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAdd(); });
@@ -270,6 +284,7 @@ function attachEventListeners() {
   $('connect-outlook-calendar')?.addEventListener('click', () => handleCalendarConnect('Outlook'));
 }
 
+// --- Render ---
 function renderAll() {
   renderDate();
   renderTasks();
@@ -303,6 +318,7 @@ function applyTheme(theme) {
   if (state.currentView === 'analytics') renderAnalytics();
 }
 
+// --- Task CRUD ---
 async function handleAdd() {
   const text = els.taskInput.value.trim();
   if (!text || !state.currentUser) return;
@@ -312,15 +328,7 @@ async function handleAdd() {
     .select()
     .single();
   if (error) return console.error('Add failed:', error);
-  state.tasks.push({
-    id: data.id,
-    text: data.text,
-    category: data.category,
-    completed: !!data.completed,
-    scheduledHour: Number.isInteger(data.scheduled_hour) ? data.scheduled_hour : null,
-    createdAt: new Date(data.created_at).getTime(),
-    completedAt: data.completed_at ? new Date(data.completed_at).getTime() : null
-  });
+  state.tasks.push(normalizeTask(data));
   els.taskInput.value = '';
   els.taskInput.focus();
   renderTasks();
@@ -372,9 +380,11 @@ async function unscheduleTask(id) {
   renderTimeline();
 }
 
+// --- Streak ---
 async function checkStreak() {
   const today = todayISO();
   const allDone = state.tasks.length > 0 && state.tasks.every(t => t.completed);
+  // last_complete_date is stored as ISO in profiles — compare directly
   if (!allDone || state.lastCompleteDate === today || !state.currentUser) return;
   state.streak += 1;
   state.longestStreak = Math.max(state.longestStreak, state.streak);
@@ -387,6 +397,7 @@ async function checkStreak() {
   renderStats();
 }
 
+// --- Reflection modal ---
 function openReflection() {
   const total = state.tasks.length;
   const done = state.tasks.filter(t => t.completed).length;
@@ -436,6 +447,7 @@ async function saveReflection() {
   }, 4000);
 }
 
+// --- Task rendering ---
 function renderTasks() {
   els.taskList.innerHTML = '';
   if (state.tasks.length === 0) {
@@ -506,10 +518,14 @@ function renderTimeline() {
   }
 }
 
+// --- Analytics ---
 function renderAnalytics() {
   const period = state.analyticsPeriod;
   const cutoff = Date.now() - period * 24 * 60 * 60 * 1000;
-  const filtered = period === 9999 ? state.history : state.history.filter(h => h.timestamp >= cutoff);
+  const filtered = period === 9999 ? state.history : state.history.filter(h => {
+    const t = parseAppDate(h.date)?.getTime();
+    return t ? t >= cutoff : false;
+  });
   const chartData = sortByAppDateAsc(filtered);
   const hasData = filtered.length > 0;
   els.analyticsEmpty.classList.toggle('visible', !hasData);
@@ -602,6 +618,7 @@ function renderChartEnergy(history) {
   });
 }
 
+// --- History view ---
 function renderHistoryList() {
   els.historyList.innerHTML = '';
   if (!state.history.length) {
@@ -648,7 +665,7 @@ async function renderHistoryDetail(date) {
       <div class="history-stat"><div class="history-stat-label">Focus</div><div class="history-stat-value">${day.focus}/10</div></div>
     </div>
     ${(tasks && tasks.length) ? `<div><div class="history-section-title">Tasks that day</div><ul class="task-list">${tasks.map(t => `<li class="history-task ${t.completed ? 'was-completed' : ''}"><div class="task-category-dot ${t.category}"></div><span>${escapeHtml(t.text)}</span></li>`).join('')}</ul></div>` : ''}
-    ${day.note ? `<div><div class="history-section-title">Reflection note</div><div class="history-note">"${escapeHtml(day.note)}"</div></div>` : ''}`;
+    ${day.note ? `<div><div class="history-section-title">Reflection note</div><div class="history-note">${escapeHtml(day.note)}</div></div>` : ''}`;
 }
 
 async function copyDayToToday(date) {
@@ -668,6 +685,7 @@ async function copyDayToToday(date) {
   switchView('today');
 }
 
+// --- AI ---
 async function callAI(mode, payload = {}) {
   try {
     const { data, error } = await supabaseClient.functions.invoke('ai-suggest', {
@@ -676,9 +694,9 @@ async function callAI(mode, payload = {}) {
     if (error) throw error;
     if (mode === 'schedule-import') return data;
     return data?.suggestion || data?.message || null;
-  } catch (error) {
-    console.error('AI call failed:', error);
-    throw error;
+  } catch (err) {
+    console.error('AI call failed:', err);
+    throw err;
   }
 }
 
@@ -697,7 +715,6 @@ async function handleAISuggest() {
   }
 }
 
-
 async function fileToBase64(file) {
   return await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -712,6 +729,7 @@ async function fileToBase64(file) {
 }
 
 async function addImportedTask(item) {
+  if (!state.currentUser) return;
   const payload = {
     user_id: state.currentUser.id,
     text: String(item.text || 'Imported task').trim(),
@@ -722,6 +740,7 @@ async function addImportedTask(item) {
   };
   const { data, error } = await supabaseClient.from('tasks').insert(payload).select().single();
   if (error) throw error;
+  // normalizeTask is defined — no more ReferenceError
   state.tasks.unshift(normalizeTask(data));
   renderAll();
 }
@@ -742,11 +761,16 @@ async function showReflectionInsight() {
   if (!els.aiInsightArea || !els.aiInsightText) return;
   els.aiInsightArea.style.display = 'block';
   els.aiInsightText.textContent = 'Thinking about your day...';
-  const insight = await callAI('insight');
-  if (insight) els.aiInsightText.textContent = insight;
-  else els.aiInsightArea.style.display = 'none';
+  try {
+    const insight = await callAI('insight');
+    if (insight) els.aiInsightText.textContent = insight;
+    else els.aiInsightArea.style.display = 'none';
+  } catch {
+    els.aiInsightArea.style.display = 'none';
+  }
 }
 
+// --- Utilities ---
 function formatHour(hour) {
   const h = hour % 12 || 12;
   return `${h}:00 ${hour < 12 ? 'AM' : 'PM'}`;

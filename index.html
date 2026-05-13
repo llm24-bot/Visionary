@@ -7,8 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <!-- chart.js and supabase must NOT use defer so they are available when config/auth/script run -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root, [data-theme="light"] {
       --bg: #f7f6f2;
@@ -328,7 +329,7 @@
         <div class="charts-grid">
           <div class="card glass-card chart-card"><div class="card-header"><div><h3>Daily completion</h3><p class="subtitle">Tasks completed per day</p></div></div><div class="chart-wrap"><canvas id="chart-completion"></canvas></div></div>
           <div class="card glass-card chart-card"><div class="card-header"><div><h3>Category mix</h3><p class="subtitle">Where your wins came from</p></div></div><div class="chart-wrap"><canvas id="chart-category"></canvas></div></div>
-          <div class="card glass-card chart-card chart-wide"><div class="card-header"><div><h3>Energy & focus</h3><p class="subtitle">How you felt each day</p></div></div><div class="chart-wrap"><canvas id="chart-energy"></canvas></div></div>
+          <div class="card glass-card chart-card chart-wide"><div class="card-header"><div><h3>Energy &amp; focus</h3><p class="subtitle">How you felt each day</p></div></div><div class="chart-wrap"><canvas id="chart-energy"></canvas></div></div>
         </div>
         <div class="analytics-empty empty-state" id="analytics-empty"><div><div class="empty-icon">📊</div><p>Your patterns will show up here.</p><p class="subtitle">Complete tasks and save reflections to build history.</p></div></div>
       </section>
@@ -360,8 +361,8 @@
     <footer><p>Built by a student who believed in the work. · <a href="privacy.html">Privacy</a></p></footer>
   </div>
 
-  <script src="config.js" defer></script>
-  <script src="auth.js" defer></script>
-  <script src="script.js" defer></script>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
