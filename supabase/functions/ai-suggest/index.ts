@@ -141,7 +141,11 @@ Rules:
       let parsed: any;
 
       try {
-        parsed = JSON.parse(rawText);
+        // Claude sometimes wraps JSON in ```json fences or adds a sentence — pull out the object
+        const cleaned = rawText.replace(/```(?:json)?/gi, "").trim();
+        const start = cleaned.indexOf("{");
+        const end = cleaned.lastIndexOf("}");
+        parsed = JSON.parse(start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned);
       } catch {
         parsed = {
           tasks: [],

@@ -4,32 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Privacy Policy — Visionary</title>
+  <script>try { document.documentElement.setAttribute('data-theme', localStorage.getItem('visionary-theme') || 'dark'); } catch (e) {}</script>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root { --bg:#0d1117; --surface:rgba(17,25,40,.62); --text:#f5f7fb; --text-dim:#b4bfd1; --border:rgba(255,255,255,.09); --accent:#45d0d6; }
-    * { box-sizing:border-box; }
-    body { margin:0; font-family:Inter,system-ui,sans-serif; background:var(--bg); color:var(--text); }
-    .bg-blobs { position:fixed; inset:0; overflow:hidden; pointer-events:none; }
-    .blob { position:absolute; width:320px; height:320px; border-radius:999px; filter:blur(80px); opacity:.18; }
-    .blob-1 { background:#45d0d6; left:-60px; top:-80px; }
-    .blob-2 { background:#7c87ff; right:-70px; top:10%; }
-    .policy-wrap { max-width:760px; margin:0 auto; padding:4rem 1.25rem; line-height:1.75; position:relative; z-index:1; }
-    h1 { font-size:2rem; margin:0 0 .5rem; }
-    h2 { margin-top:2rem; }
-    p { color:var(--text-dim); }
-    a { color:var(--accent); text-decoration:none; }
-    .card { background:var(--surface); border:1px solid var(--border); border-radius:24px; padding:28px; backdrop-filter:blur(20px); }
-  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="bg-blobs"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="horizon-glow" aria-hidden="true"></div>
   <div class="policy-wrap">
-    <p><a href="index.html">← Back to Visionary</a></p>
-    <div class="card">
+    <a class="brand" href="index.html" aria-label="Back to Visionary"><svg class="brand-mark" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 32a16 16 0 0 1 32 0"/><path d="M4 32h40"/><circle cx="24" cy="32" r="5" fill="currentColor" stroke="none"/></svg><span>Visionary</span></a>
+    <div>
       <h1>Privacy Policy</h1>
-      <p>Last updated: April 2026</p>
+      <p class="eyebrow">Last updated: September 2026</p>
       <p>Visionary is a personal productivity tool built by a college student and currently in early development. This policy explains what data is collected, where it is stored, and how it is used.</p>
       <h2>What we collect</h2>
       <p>When you create an account, Visionary stores your email address or the profile details returned by Google sign-in. When you use the app, it stores your tasks, scheduling choices, reflections, and related productivity data.</p>
@@ -41,6 +30,10 @@
       <p>Other users should not be able to view your data. Visionary is intended to use per-user database access rules so each account can only access its own records. Because the app is operated by a solo developer, the developer may still be able to access stored data at the infrastructure level.</p>
       <h2>Tracking and analytics</h2>
       <p>Visionary does not currently use advertising trackers. If product analytics, sharing features, or third-party AI processing are added in a meaningful way later, this policy should be updated before those changes take effect.</p>
+      <h2>AI features</h2>
+      <p>When you use Suggest, reflection insights, or Scan schedule, the relevant tasks, recent reflection summaries, or the uploaded image are sent through a Supabase Edge Function to Anthropic's Claude API to generate a response. Uploaded schedule images are processed for that request only and are not saved by Visionary. Pattern cards on the Patterns page are computed in your browser.</p>
+      <h2>Stored in your browser</h2>
+      <p>Your theme choice, focus-session log, and demo-mode data are stored in your browser's local storage and never leave your device. Clearing site data removes them.</p>
       <h2>Your choices</h2>
       <p>You can stop using Visionary at any time. If you want your account and stored data removed, contact the developer and request deletion.</p>
       <h2>Contact</h2>

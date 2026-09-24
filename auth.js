@@ -21,15 +21,23 @@ let isSignupMode = false;
 // Track the last user ID we bootstrapped so we never double-load for the same session
 let lastBootstrappedUserId = null;
 
+function finishBoot() {
+  document.body.classList.remove('booting');
+}
+
 function showApp() {
+  finishBoot();
   authEls.authScreen.style.display = 'none';
   authEls.appShell.style.display = 'block';
 }
 
 function showAuth() {
+  finishBoot();
   authEls.authScreen.style.display = 'grid';
   authEls.appShell.style.display = 'none';
 }
+window.showApp = showApp;
+window.showAuth = showAuth;
 
 function setAuthMode(signup) {
   isSignupMode = signup;
@@ -102,6 +110,12 @@ async function handleEmailAuth() {
 
 async function logout() {
   lastBootstrappedUserId = null;
+  // Demo mode never touches Supabase auth
+  if (window.visionaryIsDemo && window.visionaryIsDemo()) {
+    window.visionaryExitDemo();
+    showAuth();
+    return;
+  }
   const { error } = await supabaseClient.auth.signOut();
   if (error) {
     console.error('Logout failed:', error);
@@ -115,7 +129,12 @@ function initAuth() {
   // onAuthStateChange is the single source of truth for session state.
   // It fires immediately with the current session on page load (INITIAL_SESSION event),
   // which replaces the need for a separate checkAuthState() call.
+  // Safety net: never leave the boot splash up if the network is slow
+  setTimeout(finishBoot, 4000);
+
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    // Ignore auth events while exploring the demo
+    if (window.visionaryIsDemo && window.visionaryIsDemo()) return;
     // On sign-out, always reset regardless of lastBootstrappedUserId
     if (event === 'SIGNED_OUT') {
       lastBootstrappedUserId = null;
@@ -134,6 +153,10 @@ function initAuth() {
   authEls.authSubmit.addEventListener('click', handleEmailAuth);
   authEls.authPassword.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleEmailAuth();
+  });
+
+  document.getElementById('btn-demo')?.addEventListener('click', () => {
+    if (window.visionaryStartDemo) window.visionaryStartDemo();
   });
 
   authEls.btnGoogle.addEventListener('click', async () => {

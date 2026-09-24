@@ -2,364 +2,435 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Visionary — Consistency, built into your day</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Visionary — Show up, on purpose</title>
+  <meta name="description" content="Visionary is a calm daily planner: tasks, a live day horizon, focus sessions, reflections, and AI coaching.">
+  <meta name="theme-color" content="#0c0d10">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c0d10'/%3E%3Cpath d='M6 21a10 10 0 0 1 20 0' fill='none' stroke='%23f2b36b' stroke-width='2.5' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='21' r='3.2' fill='%23f2b36b'/%3E%3C/svg%3E">
+  <script>
+    // Apply saved theme before paint to avoid a flash
+    try { document.documentElement.setAttribute('data-theme', localStorage.getItem('visionary-theme') || 'dark'); } catch (e) {}
+  </script>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
   <!-- chart.js and supabase must NOT use defer so they are available when config/auth/script run -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    :root, [data-theme="light"] {
-      --bg: #f7f6f2;
-      --surface: rgba(255,255,255,.72);
-      --surface-2: rgba(255,255,255,.88);
-      --surface-solid: #ffffff;
-      --text: #191a1d;
-      --text-dim: #626878;
-      --text-faint: #98a1b3;
-      --border: rgba(18,24,38,.1);
-      --accent-1: #0d8b8f;
-      --accent-2: #4f46e5;
-      --accent-3: #22a06b;
-      --accent-4: #c5771b;
-      --accent-5: #8b5cf6;
-      --danger: #d92d20;
-      --shadow: 0 20px 50px rgba(16,24,40,.10);
-      --blur: blur(22px);
-    }
-    [data-theme="dark"] {
-      --bg: #0d1117;
-      --surface: rgba(17,25,40,.62);
-      --surface-2: rgba(24,34,54,.84);
-      --surface-solid: #121927;
-      --text: #f5f7fb;
-      --text-dim: #b4bfd1;
-      --text-faint: #7f8aa3;
-      --border: rgba(255,255,255,.09);
-      --accent-1: #45d0d6;
-      --accent-2: #7c87ff;
-      --accent-3: #57d68d;
-      --accent-4: #f3a847;
-      --accent-5: #b68cff;
-      --danger: #ff6b6b;
-      --shadow: 0 18px 46px rgba(0,0,0,.32);
-      --blur: blur(22px);
-    }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--text); }
-    body { overflow-x: hidden; }
-    button, input, textarea { font: inherit; }
-    button { cursor: pointer; }
-    .hidden { display: none !important; }
-    .bg-blobs { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
-    .blob { position: absolute; border-radius: 999px; filter: blur(80px); opacity: .22; }
-    .blob-1 { width: 340px; height: 340px; background: var(--accent-1); top: -80px; left: -60px; }
-    .blob-2 { width: 300px; height: 300px; background: var(--accent-2); right: -80px; top: 12%; }
-    .blob-3 { width: 360px; height: 360px; background: var(--accent-5); left: 18%; bottom: -120px; }
-    .glass-card, .card { background: var(--surface); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 24px; }
-    .auth-screen, .app-shell { position: relative; z-index: 1; }
-    .auth-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-    .auth-container { width: min(100%, 440px); }
-    .auth-logo, .logo { display: flex; align-items: center; gap: 12px; }
-    .auth-logo { justify-content: center; margin-bottom: 24px; }
-    .logo-mark { width: 18px; height: 18px; border-radius: 6px 2px 6px 2px; background: linear-gradient(135deg, var(--accent-1), var(--accent-2)); box-shadow: 0 0 0 5px rgba(69,208,214,.08); }
-    .logo-text { font-weight: 800; letter-spacing: -.03em; }
-    .auth-card { padding: 28px; }
-    .auth-title { margin: 0 0 8px; font-size: 2rem; }
-    .auth-subtitle, .subtitle, .auth-footer, .auth-toggle, .auth-error { color: var(--text-dim); }
-    .auth-form { display: grid; gap: 12px; margin-top: 16px; }
-    .auth-form input, .input-row input, textarea { width: 100%; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; outline: none; }
-    .auth-form input:focus, .input-row input:focus, textarea:focus { border-color: var(--accent-1); box-shadow: 0 0 0 4px rgba(69,208,214,.14); }
-    .btn-primary, .btn-google, .btn-ai { border: 0; border-radius: 16px; padding: 12px 16px; font-weight: 700; }
-    .btn-primary { background: linear-gradient(135deg, var(--accent-1), var(--accent-2)); color: white; }
-    .btn-block { width: 100%; }
-    .btn-google { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
-    .auth-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--text-faint); }
-    .auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
-    .auth-toggle { margin-top: 16px; text-align: center; }
-    .auth-toggle a, .auth-footer a, footer a, .policy-wrap a { color: var(--accent-1); text-decoration: none; }
-    .auth-error { min-height: 20px; font-size: .94rem; }
-    .auth-footer { text-align: center; font-size: .9rem; margin-top: 18px; }
-    .app-shell { display: none; padding: 18px; }
-    .nav { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 18px; padding: 16px 18px; background: var(--surface); backdrop-filter: var(--blur); border: 1px solid var(--border); border-radius: 22px; position: sticky; top: 14px; z-index: 20; }
-    .nav-left, .nav-right, .view-switcher, .input-row, .card-header, .modal-header, .reflect-stats, .history-day-meta, .analytics-summary { display: flex; align-items: center; gap: 12px; }
-    .nav-left { flex-wrap: wrap; }
-    .view-switcher { background: var(--surface-2); border: 1px solid var(--border); padding: 4px; border-radius: 14px; }
-    .view-btn, .period-btn, .icon-btn { border: 0; color: var(--text-dim); background: transparent; border-radius: 12px; padding: 10px 12px; }
-    .view-btn.active, .period-btn.active { background: var(--surface-solid); color: var(--text); }
-    .icon-btn { width: 42px; height: 42px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--border); }
-    .app-grid.view { display: none; }
-    .app-grid.active { display: grid; }
-    .app-grid { gap: 18px; }
-    .view-today { grid-template-columns: 1.1fr .9fr; }
-    .col { min-width: 0; }
-    .stats-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
-    .stat-card, .summary-card { background: var(--surface); backdrop-filter: var(--blur); border: 1px solid var(--border); border-radius: 20px; padding: 18px; box-shadow: var(--shadow); }
-    .stat-label, .summary-label, .reflect-stat-label, .history-stat-label { color: var(--text-dim); font-size: .9rem; }
-    .stat-value, .summary-value { font-size: 1.8rem; font-weight: 800; letter-spacing: -.03em; }
-    .progress-container { margin-bottom: 12px; height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--border); }
-    .progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-1), var(--accent-3)); }
-    .card { padding: 18px; }
-    .card-header { justify-content: space-between; margin-bottom: 14px; }
-    .card-header h2, .card-header h3, .analytics-header h1, .analytics-header h3, .history-detail-card h3 { margin: 0; }
-    .btn-ai { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); }
-    .input-row { align-items: stretch; flex-wrap: wrap; margin-bottom: 14px; }
-    #task-input { flex: 1 1 220px; }
-    .custom-select { position: relative; }
-    .select-trigger { min-width: 140px; height: 100%; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 16px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .select-options { position: absolute; top: calc(100% + 8px); left: 0; right: 0; background: var(--surface-solid); border: 1px solid var(--border); border-radius: 16px; padding: 8px; display: none; box-shadow: var(--shadow); z-index: 15; }
-    .custom-select.open .select-options { display: block; }
-    .select-option { padding: 10px 12px; border-radius: 10px; cursor: pointer; }
-    .select-option:hover { background: var(--surface); }
-    .task-list, .history-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
-    .task-item, .history-day, .history-task { display: flex; align-items: center; gap: 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 18px; padding: 14px; }
-    .task-item.completed .task-text { text-decoration: line-through; color: var(--text-faint); }
-    .task-text { flex: 1; }
-    .task-category-dot { width: 10px; height: 10px; border-radius: 999px; flex: 0 0 10px; }
-    .focus { background: var(--accent-1); }
-    .health { background: var(--accent-3); }
-    .learn { background: var(--accent-2); }
-    .build { background: var(--accent-4); }
-    .rest { background: var(--accent-5); }
-    .task-checkbox { width: 22px; height: 22px; border-radius: 999px; border: 2px solid var(--border); }
-    .task-checkbox.checked { background: var(--accent-3); border-color: var(--accent-3); box-shadow: inset 0 0 0 4px rgba(255,255,255,.78); }
-    .delete-btn, .scheduled-remove { background: transparent; border: 0; color: var(--text-faint); font-size: 1rem; }
-    .empty-state { display: grid; place-items: center; padding: 28px 18px; color: var(--text-dim); text-align: center; border: 1px dashed var(--border); border-radius: 18px; }
-    .empty-state.hidden { display: none; }
-    .empty-icon { font-size: 1.7rem; margin-bottom: 8px; }
-    .timeline-card { height: calc(100vh - 126px); display: flex; flex-direction: column; }
-    .timeline-container { overflow: auto; padding-right: 4px; display: grid; gap: 10px; }
-    .hour-block { display: grid; grid-template-columns: 80px 1fr; gap: 10px; align-items: start; }
-    .hour-label { color: var(--text-dim); font-size: .92rem; padding-top: 14px; }
-    .hour-slot { min-height: 64px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 18px; padding: 10px; display: grid; gap: 8px; }
-    .hour-slot.is-now { border-color: var(--accent-1); box-shadow: inset 0 0 0 1px rgba(69,208,214,.24); }
-    .hour-slot.drag-over { outline: 2px dashed var(--accent-1); outline-offset: 2px; }
-    .scheduled-task { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.06); border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; }
-    .scheduled-task span { flex: 1; }
-    .analytics-header, .history-layout { display: flex; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
-    .full-width { width: 100%; }
-    .analytics-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
-    .summary-trend { color: var(--text-dim); font-size: .9rem; margin-top: 6px; }
-    .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-    .chart-wide { grid-column: 1 / -1; }
-    .chart-wrap { height: 290px; }
-    .analytics-empty { display: none; margin-top: 16px; }
-    .analytics-empty.visible { display: grid; }
-    .history-layout { align-items: start; }
-    .history-list-card { width: min(360px, 100%); }
-    .history-detail-card { flex: 1; }
-    .history-day { justify-content: space-between; cursor: pointer; }
-    .history-day.active { border-color: var(--accent-1); }
-    .history-day-meta { flex: 1; justify-content: flex-end; }
-    .history-day-bar { width: 110px; height: 8px; border-radius: 999px; background: var(--surface-solid); overflow: hidden; }
-    .history-day-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-1), var(--accent-3)); }
-    .history-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
-    .history-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 16px; padding: 14px; }
-    .history-section-title { margin: 10px 0; font-weight: 700; }
-    .history-note { padding: 14px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); }
-    .modal-backdrop { position: fixed; inset: 0; background: rgba(6,10,18,.52); backdrop-filter: blur(10px); display: none; align-items: center; justify-content: center; padding: 18px; z-index: 50; }
-    .modal-backdrop.open { display: flex; }
-    .modal { width: min(100%, 560px); padding: 18px; }
-    .modal-body { display: grid; gap: 16px; }
-    .reflect-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    .reflect-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 16px; padding: 14px; }
-    .reflect-stat-value, .history-stat-value { font-weight: 800; font-size: 1.2rem; }
-    .reflect-field { display: grid; gap: 8px; }
-    .slider { width: 100%; }
-    .slider-hint { display: flex; justify-content: space-between; color: var(--text-faint); font-size: .86rem; }
-    .ai-insight-area { padding: 14px; border-radius: 16px; background: rgba(69,208,214,.08); border: 1px solid rgba(69,208,214,.18); margin-bottom: 14px; }
-    .ai-insight-label { font-size: .85rem; color: var(--text-dim); margin-bottom: 6px; }
-    .ai-suggestion-popup { margin-top: 12px; background: rgba(69,208,214,.08); border: 1px solid rgba(69,208,214,.18); padding: 12px 14px; border-radius: 16px; position: relative; color: var(--text-dim); }
-    .ai-suggestion-close { position: absolute; top: 8px; right: 8px; }
-    footer { text-align: center; color: var(--text-dim); padding: 20px 10px 8px; }
-    .policy-wrap { max-width: 760px; margin: 0 auto; padding: 4rem 1.25rem; line-height: 1.7; position: relative; z-index: 1; }
-    .policy-wrap p { color: var(--text-dim); }
-    @media (max-width: 1080px) {
-      .view-today, .charts-grid, .history-layout, .analytics-summary, .history-stats { grid-template-columns: 1fr; display: grid; }
-      .timeline-card { height: auto; }
-      .history-list-card { width: 100%; }
-    }
-    @media (max-width: 720px) {
-      .app-shell { padding: 12px; }
-      .nav { align-items: flex-start; flex-direction: column; }
-      .nav-right, .nav-left { width: 100%; justify-content: space-between; }
-      .view-switcher { width: 100%; overflow: auto; }
-      .stats-strip { grid-template-columns: 1fr; }
-      .hour-block { grid-template-columns: 66px 1fr; }
-      .input-row { flex-direction: column; }
-      .select-trigger, .btn-primary { width: 100%; }
-    }
-  </style>
 </head>
-<body>
-  <div class="bg-blobs">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-    <div class="blob blob-3"></div>
+<body class="booting">
+  <!-- Icon sprite (Lucide-style strokes) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
+      <symbol id="i-today" viewBox="0 0 24 24"><path d="M4 18a8 8 0 0 1 16 0"/><path d="M2 18h20"/><path d="M12 6V3M5.6 8.6 3.5 6.5M18.4 8.6l2.1-2.1"/></symbol>
+      <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M10 2h4"/></symbol>
+      <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M8 17v-5M13 17V8M18 17v-9"/></symbol>
+      <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17l.7 1.8 1.8.7-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
+      <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 9h10M7 13h10M7 17h6"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+      <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
+      <symbol id="i-command" viewBox="0 0 24 24"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4h3v16H7zM14 4h3v16h-3z"/></symbol>
+      <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+      <symbol id="i-feather" viewBox="0 0 24 24"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><path d="M16 8 2 22M17.5 15H9"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+      <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></symbol>
+      <symbol id="i-gift" viewBox="0 0 24 24"><path d="M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="grain" aria-hidden="true"></div>
+  <div class="horizon-glow" aria-hidden="true"></div>
+
+  <!-- Boot splash (prevents login-screen flash while the session restores) -->
+  <div class="boot" id="boot" aria-hidden="true">
+    <svg class="boot-mark" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M8 32a16 16 0 0 1 32 0"/><path d="M4 32h40"/><circle cx="24" cy="32" r="4.5" fill="currentColor" stroke="none"/></svg>
   </div>
 
+  <!-- ================= AUTH ================= -->
   <div class="auth-screen" id="auth-screen">
-    <div class="auth-container">
-      <div class="auth-logo">
-        <div class="logo-mark"></div>
-        <span class="logo-text">Visionary</span>
+    <section class="auth-hero">
+      <a class="brand" href="#" aria-label="Visionary">
+        <svg class="brand-mark" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 32a16 16 0 0 1 32 0"/><path d="M4 32h40"/><circle cx="24" cy="32" r="5" fill="currentColor" stroke="none"/></svg>
+        <span>Visionary</span>
+      </a>
+      <div class="auth-hero-copy">
+        <p class="eyebrow">A daily practice, not a to‑do list</p>
+        <h1 class="display">Show up,<br><em>on purpose.</em></h1>
+        <p class="lede">Plan the day on a living horizon, protect deep work with focus sessions, and let a quiet AI coach spot the patterns you miss.</p>
+        <ul class="auth-points">
+          <li><span class="dot" style="--c:var(--cat-focus)"></span>Drag tasks onto a timeline that follows the sun</li>
+          <li><span class="dot" style="--c:var(--cat-build)"></span>Snap a photo of any schedule — AI imports it</li>
+          <li><span class="dot" style="--c:var(--cat-health)"></span>Reflect in 30 seconds, see your patterns grow</li>
+        </ul>
       </div>
-      <div class="auth-card glass-card">
-        <h1 class="auth-title" id="auth-title">Welcome back</h1>
+      <svg class="auth-horizon" viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="authArc" x1="0" x2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity="0"/><stop offset=".5" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient>
+          <radialGradient id="authSun"><stop offset="0" stop-color="var(--accent)" stop-opacity=".55"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></radialGradient>
+        </defs>
+        <circle cx="300" cy="200" r="150" fill="url(#authSun)"/>
+        <path d="M0 200 A300 170 0 0 1 600 200" fill="none" stroke="url(#authArc)" stroke-width="1.5"/>
+        <path d="M60 200 A240 120 0 0 1 540 200" fill="none" stroke="var(--line-2)" stroke-dasharray="2 6"/>
+        <line x1="0" y1="199.5" x2="600" y2="199.5" stroke="var(--line-2)"/>
+      </svg>
+    </section>
+
+    <section class="auth-panel">
+      <div class="auth-card">
+        <h2 class="auth-title" id="auth-title">Welcome back</h2>
         <p class="auth-subtitle" id="auth-subtitle">Sign in to continue building your routine.</p>
-        <button class="btn-google" id="btn-google" type="button">
+        <button class="btn btn-ghost btn-block" id="btn-google" type="button">
           <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
           <span>Continue with Google</span>
         </button>
-        <div class="auth-divider"><span>or</span></div>
+        <div class="auth-divider"><span>or with email</span></div>
         <div class="auth-form">
-          <input type="email" id="auth-email" placeholder="Email" autocomplete="email">
-          <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
-          <button class="btn-primary btn-block" id="btn-auth-submit" type="button">Sign in</button>
-          <p class="auth-error" id="auth-error"></p>
+          <label class="field"><span>Email</span><input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email"></label>
+          <label class="field"><span>Password</span><input type="password" id="auth-password" placeholder="••••••••" autocomplete="current-password"></label>
+          <button class="btn btn-primary btn-block" id="btn-auth-submit" type="button">Sign in</button>
+          <p class="auth-error" id="auth-error" role="alert"></p>
         </div>
         <p class="auth-toggle"><span id="auth-toggle-text">Don't have an account?</span> <a href="#" id="auth-toggle-link">Sign up</a></p>
+        <div class="auth-demo">
+          <button class="link-btn" id="btn-demo" type="button">Just looking? Explore the demo <svg class="i"><use href="#i-play"/></svg></button>
+        </div>
       </div>
       <p class="auth-footer">By continuing, you agree to our <a href="privacy.html">privacy policy</a>.</p>
-    </div>
+    </section>
   </div>
 
+  <!-- ================= APP ================= -->
   <div class="app-shell" id="app-shell">
-    <nav class="nav">
-      <div class="nav-left">
-        <div class="logo"><div class="logo-mark"></div><span class="logo-text">Visionary</span></div>
-        <div class="view-switcher">
-          <button class="view-btn active" data-view="today" type="button">Today</button>
-          <button class="view-btn" data-view="history" type="button">History</button>
-          <button class="view-btn" data-view="analytics" type="button">Analytics</button>
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="Visionary home" data-view-link="today">
+        <svg class="brand-mark" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 32a16 16 0 0 1 32 0"/><path d="M4 32h40"/><circle cx="24" cy="32" r="5" fill="currentColor" stroke="none"/></svg>
+        <span>Visionary</span>
+      </a>
+      <nav class="side-nav" aria-label="Main">
+        <button class="view-btn active" data-view="today" type="button"><svg class="i"><use href="#i-today"/></svg><span>Today</span><kbd>1</kbd></button>
+        <button class="view-btn" data-view="focus" type="button"><svg class="i"><use href="#i-timer"/></svg><span>Focus</span><kbd>2</kbd></button>
+        <button class="view-btn" data-view="history" type="button"><svg class="i"><use href="#i-history"/></svg><span>History</span><kbd>3</kbd></button>
+        <button class="view-btn" data-view="analytics" type="button"><svg class="i"><use href="#i-chart"/></svg><span>Patterns</span><kbd>4</kbd></button>
+      </nav>
+      <button class="cmdk-trigger" id="cmdk-open" type="button"><svg class="i"><use href="#i-command"/></svg><span>Quick actions</span><kbd id="cmdk-kbd">Ctrl K</kbd></button>
+      <div class="side-foot">
+        <button class="side-action" id="reflect-btn" type="button"><svg class="i"><use href="#i-feather"/></svg><span>End-of-day reflection</span></button>
+        <button class="side-action" id="whatsnew-btn" type="button"><svg class="i"><use href="#i-gift"/></svg><span>What's new</span><span class="pill-new" id="whatsnew-dot">New</span></button>
+        <div class="side-user">
+          <div class="avatar" id="user-avatar">V</div>
+          <div class="side-user-meta"><div class="side-user-name" id="user-name">Signed in</div><div class="side-user-mode" id="user-mode">Cloud sync on</div></div>
+          <button class="icon-btn" id="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme"><svg class="i" id="theme-icon"><use href="#i-sun"/></svg></button>
+          <button class="icon-btn" id="logout-btn" type="button" title="Log out" aria-label="Log out"><svg class="i"><use href="#i-logout"/></svg></button>
         </div>
       </div>
-      <div class="nav-right">
-        <div>
-          <div class="date-display" id="date-display">Loading...</div>
-          <div class="subtitle" id="now-time">--:--</div>
-        </div>
-        <button class="icon-btn" id="theme-toggle" type="button" title="Toggle theme">
-          <svg id="theme-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-        </button>
-        <button class="icon-btn" id="reflect-btn" type="button" title="End day reflection">💭</button>
-        <button class="icon-btn" id="logout-btn" type="button" title="Log out">↗</button>
-      </div>
-    </nav>
+    </aside>
 
-    <main class="app-grid view view-today active" id="view-today">
-      <section class="col col-left">
-        <div class="stats-strip">
-          <div class="stat-card"><div class="stat-label">Streak</div><div class="stat-value"><span id="streak-count">0</span>🔥</div></div>
-          <div class="stat-card"><div class="stat-label">Today</div><div class="stat-value"><span id="completed-count">0</span>/<span id="total-count">0</span></div></div>
-          <div class="stat-card"><div class="stat-label">Progress</div><div class="stat-value"><span id="progress-percent">0</span>%</div></div>
+    <div class="main">
+      <div class="mobile-top">
+        <a class="brand" href="#" aria-label="Visionary" data-view-link="today">
+          <svg class="brand-mark" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 32a16 16 0 0 1 32 0"/><path d="M4 32h40"/><circle cx="24" cy="32" r="5" fill="currentColor" stroke="none"/></svg>
+          <span>Visionary</span>
+        </a>
+        <div class="mobile-top-actions">
+          <button class="icon-btn" id="cmdk-open-m" type="button" aria-label="Quick actions"><svg class="i"><use href="#i-command"/></svg></button>
+          <button class="icon-btn" id="theme-toggle-m" type="button" aria-label="Toggle theme"><svg class="i theme-icon-m"><use href="#i-sun"/></svg></button>
+          <button class="icon-btn" id="logout-btn-m" type="button" aria-label="Log out"><svg class="i"><use href="#i-logout"/></svg></button>
         </div>
-        <div class="progress-container"><div class="progress-bar" id="progress-bar"></div></div>
-        <div class="card glass-card">
-          <div class="card-header">
-            <div><h2>Today's Focus</h2><p class="subtitle">What are you showing up for?</p></div>
-            <button class="btn-ai" id="ai-suggest-btn" type="button"><span>✨</span> <span id="ai-suggest-label">Suggest</span></button>
+      </div>
+      <!-- ========== TODAY ========== -->
+      <main class="view active" id="view-today">
+        <header class="page-head">
+          <div>
+            <p class="eyebrow" id="greeting">Good day</p>
+            <h1 class="page-title" id="date-display">Loading…</h1>
           </div>
-          <div class="input-row">
-            <input type="text" id="task-input" placeholder="Add a task..." autocomplete="off">
-            <div class="custom-select" id="category-select">
-              <button class="select-trigger" id="select-trigger" type="button"><span id="select-label">🎯 Focus</span><span>⌄</span></button>
-              <div class="select-options" id="select-options">
-                <div class="select-option" data-value="focus">🎯 Focus</div>
-                <div class="select-option" data-value="health">💪 Health</div>
-                <div class="select-option" data-value="learn">📚 Learn</div>
-                <div class="select-option" data-value="build">🛠️ Build</div>
-                <div class="select-option" data-value="rest">🌙 Rest</div>
+          <div class="page-head-right">
+            <div class="clock mono" id="now-time">--:--</div>
+            <div class="demo-badge hidden" id="demo-badge">Demo mode · data stays in this browser</div>
+          </div>
+        </header>
+
+        <section class="horizon-card card" aria-label="Day horizon">
+          <div class="horizon-meta">
+            <div>
+              <div class="label">Day horizon</div>
+              <div class="horizon-left" id="horizon-left">—</div>
+            </div>
+            <div class="horizon-next">
+              <div class="label">Next up</div>
+              <div class="horizon-next-text" id="next-up">Nothing scheduled</div>
+            </div>
+          </div>
+          <svg class="horizon" id="horizon" viewBox="0 0 640 170" role="img" aria-label="Arc of the day with scheduled tasks"></svg>
+        </section>
+
+        <section class="stats-strip">
+          <div class="stat">
+            <div class="stat-icon" style="--c:var(--accent)"><svg class="i"><use href="#i-flame"/></svg></div>
+            <div><div class="label">Streak</div><div class="stat-value"><span id="streak-count">0</span><small> days</small></div></div>
+          </div>
+          <div class="stat">
+            <svg class="ring" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="18" class="ring-track"/><circle cx="22" cy="22" r="18" class="ring-fill" id="progress-ring"/></svg>
+            <div><div class="label">Today</div><div class="stat-value"><span id="completed-count">0</span><small>/<span id="total-count">0</span> · <span id="progress-percent">0</span>%</small></div></div>
+          </div>
+          <div class="stat">
+            <div class="stat-icon" style="--c:var(--cat-learn)"><svg class="i"><use href="#i-timer"/></svg></div>
+            <div><div class="label">Focused today</div><div class="stat-value"><span id="focus-minutes">0</span><small> min</small></div></div>
+          </div>
+          <div class="progress-container" aria-hidden="true"><div class="progress-bar" id="progress-bar"></div></div>
+        </section>
+
+        <div class="today-grid">
+          <section class="card tasks-card">
+            <div class="card-head">
+              <div><h2>Today's focus</h2><p class="subtitle">What are you showing up for?</p></div>
+              <div class="card-actions">
+                <label class="btn btn-ghost btn-sm" for="schedule-image-input" title="Import tasks from a photo or screenshot of a schedule"><svg class="i"><use href="#i-scan"/></svg><span>Scan schedule</span></label>
+                <input id="schedule-image-input" type="file" accept="image/*" hidden>
+                <button class="btn btn-ghost btn-sm" id="ai-suggest-btn" type="button"><svg class="i"><use href="#i-sparkle"/></svg><span id="ai-suggest-label">Suggest</span></button>
               </div>
             </div>
-            <button id="add-btn" class="btn-primary" type="button">Add</button>
-          </div>
-          <ul id="task-list" class="task-list"></ul>
-          <div class="empty-state" id="empty-state"><div><div class="empty-icon">✨</div><p>No tasks yet. Add one above to start your day.</p></div></div>
-        </div>
-      </section>
-      <section class="col col-right">
-        <div class="card glass-card timeline-card">
-          <div class="card-header"><div><h2>Today's Timeline</h2><p class="subtitle">Drag tasks to schedule them</p></div></div>
-          <div class="timeline-container" id="timeline-container"></div>
-        </div>
-      </section>
-    </main>
 
-    <main class="app-grid view view-history" id="view-history">
-      <section class="col full-width">
-        <div class="analytics-header"><div><h1>Your History</h1><p class="subtitle">Look back at past days. Copy what worked.</p></div></div>
+            <div class="composer">
+              <input type="text" id="task-input" placeholder="Add a task… try “gym at 6pm”" autocomplete="off" aria-label="New task">
+              <button id="add-btn" class="btn btn-primary" type="button" aria-label="Add task"><svg class="i"><use href="#i-plus"/></svg><span>Add</span></button>
+            </div>
+            <div class="chips" id="category-chips" role="radiogroup" aria-label="Category">
+              <button class="chip active" data-value="focus" role="radio" aria-checked="true" type="button"><span class="dot" style="--c:var(--cat-focus)"></span>Focus</button>
+              <button class="chip" data-value="health" role="radio" aria-checked="false" type="button"><span class="dot" style="--c:var(--cat-health)"></span>Health</button>
+              <button class="chip" data-value="learn" role="radio" aria-checked="false" type="button"><span class="dot" style="--c:var(--cat-learn)"></span>Learn</button>
+              <button class="chip" data-value="build" role="radio" aria-checked="false" type="button"><span class="dot" style="--c:var(--cat-build)"></span>Build</button>
+              <button class="chip" data-value="rest" role="radio" aria-checked="false" type="button"><span class="dot" style="--c:var(--cat-rest)"></span>Rest</button>
+            </div>
+
+            <div id="ai-slot"></div>
+
+            <ul id="task-list" class="task-list"></ul>
+            <div class="empty-state" id="empty-state">
+              <svg viewBox="0 0 120 60" class="empty-art" aria-hidden="true"><path d="M10 55a50 50 0 0 1 100 0" fill="none" stroke="currentColor" stroke-dasharray="3 6"/><circle cx="60" cy="55" r="7" fill="var(--accent)"/></svg>
+              <p><strong>A blank horizon.</strong></p>
+              <p class="subtitle">Add a task, press <kbd>N</kbd>, or scan a schedule to begin.</p>
+            </div>
+          </section>
+
+          <section class="card timeline-card">
+            <div class="card-head">
+              <div><h2>Timeline</h2><p class="subtitle">Drag tasks in, or pick a time on each task</p></div>
+              <button class="btn btn-ghost btn-sm" id="jump-now" type="button"><svg class="i"><use href="#i-clock"/></svg><span>Now</span></button>
+            </div>
+            <div class="timeline-container" id="timeline-container"></div>
+          </section>
+        </div>
+      </main>
+
+      <!-- ========== FOCUS ========== -->
+      <main class="view" id="view-focus">
+        <header class="page-head">
+          <div><p class="eyebrow">Deep work</p><h1 class="page-title">Focus session</h1></div>
+        </header>
+        <div class="focus-grid">
+          <section class="card focus-card">
+            <div class="focus-presets" role="group" aria-label="Session length">
+              <button class="seg active" data-min="25" type="button">25 min</button>
+              <button class="seg" data-min="50" type="button">50 min</button>
+              <button class="seg" data-min="10" type="button">10 min</button>
+            </div>
+            <div class="focus-dial">
+              <svg viewBox="0 0 240 240" aria-hidden="true">
+                <circle cx="120" cy="120" r="104" class="dial-track"/>
+                <circle cx="120" cy="120" r="104" class="dial-fill" id="dial-fill"/>
+                <g id="dial-ticks"></g>
+              </svg>
+              <div class="dial-center">
+                <div class="dial-time mono" id="focus-time">25:00</div>
+                <div class="dial-label" id="focus-state">Ready when you are</div>
+              </div>
+            </div>
+            <label class="field focus-task-field"><span>Working on</span>
+              <select id="focus-task"><option value="">Free focus (no task)</option></select>
+            </label>
+            <div class="focus-controls">
+              <button class="icon-btn lg" id="focus-reset" type="button" aria-label="Reset"><svg class="i"><use href="#i-reset"/></svg></button>
+              <button class="btn btn-primary btn-lg" id="focus-start" type="button"><svg class="i"><use href="#i-play"/></svg><span>Start focus</span></button>
+              <label class="toggle"><input type="checkbox" id="focus-complete-toggle" checked><span>Mark task done when finished</span></label>
+            </div>
+          </section>
+          <section class="card">
+            <div class="card-head"><div><h2>Today's sessions</h2><p class="subtitle">Saved in this browser</p></div></div>
+            <ul class="session-list" id="session-list"></ul>
+            <div class="empty-state small" id="session-empty"><p class="subtitle">No sessions yet. Your first one is the hardest.</p></div>
+            <div class="focus-total"><span class="label">Total today</span><span class="mono" id="focus-total">0 min</span></div>
+          </section>
+        </div>
+      </main>
+
+      <!-- ========== HISTORY ========== -->
+      <main class="view" id="view-history">
+        <header class="page-head">
+          <div><p class="eyebrow">Look back</p><h1 class="page-title">Your history</h1></div>
+          <p class="subtitle page-head-note">Revisit past days. Copy what worked.</p>
+        </header>
         <div class="history-layout">
-          <div class="history-list-card card glass-card">
-            <div class="card-header"><div><h3>Past days</h3><p class="subtitle">Click to view</p></div></div>
+          <section class="card history-list-card">
+            <div class="card-head"><div><h3>Past days</h3></div></div>
             <ul class="history-list" id="history-list"></ul>
-            <div class="empty-state" id="history-list-empty"><div><div class="empty-icon">📭</div><p>No past days yet. Reflections show up here once you complete a day.</p></div></div>
-          </div>
-          <div class="history-detail-card card glass-card">
-            <div class="card-header" id="history-detail-header">
+            <div class="empty-state small" id="history-list-empty"><p class="subtitle">No past days yet. Save a reflection to start your archive.</p></div>
+          </section>
+          <section class="card history-detail-card">
+            <div class="card-head" id="history-detail-header">
               <div><h3 id="history-detail-date">Select a day</h3><p class="subtitle" id="history-detail-summary">Pick a past day from the list.</p></div>
-              <button class="btn-primary hidden" id="copy-to-today-btn" type="button">Copy to today</button>
+              <button class="btn btn-ghost btn-sm hidden" id="copy-to-today-btn" type="button"><svg class="i"><use href="#i-copy"/></svg><span>Copy to today</span></button>
             </div>
             <div id="history-detail-body" class="history-detail-body">
-              <div class="empty-state"><div><div class="empty-icon">←</div><p>Select a day from the list to see what you did.</p></div></div>
+              <div class="empty-state small"><p class="subtitle">Select a day to see what you did.</p></div>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <!-- ========== PATTERNS ========== -->
+      <main class="view" id="view-analytics">
+        <header class="page-head">
+          <div><p class="eyebrow">Insights</p><h1 class="page-title">Your patterns</h1></div>
+          <div class="segmented" role="group" aria-label="Period">
+            <button class="period-btn seg active" data-period="7" type="button">7 days</button>
+            <button class="period-btn seg" data-period="30" type="button">30 days</button>
+            <button class="period-btn seg" data-period="all" type="button">All time</button>
+          </div>
+        </header>
+
+        <section class="analytics-summary">
+          <div class="stat"><div><div class="label">Tasks completed</div><div class="stat-value" id="summary-completed">0</div><div class="stat-sub">Across selected period</div></div></div>
+          <div class="stat"><div><div class="label">Completion rate</div><div class="stat-value" id="summary-rate">0%</div><div class="stat-sub">Done vs planned</div></div></div>
+          <div class="stat"><div><div class="label">Avg energy</div><div class="stat-value" id="summary-energy">—</div><div class="stat-sub">1–10 scale</div></div></div>
+          <div class="stat"><div><div class="label">Longest streak</div><div class="stat-value" id="summary-streak">0</div><div class="stat-sub">Days in a row</div></div></div>
+        </section>
+
+        <section class="card heatmap-card">
+          <div class="card-head">
+            <div><h3>Consistency map</h3><p class="subtitle">Last 26 weeks · each square is a day</p></div>
+            <div class="heat-legend"><span>Less</span><i data-l="0"></i><i data-l="1"></i><i data-l="2"></i><i data-l="3"></i><i data-l="4"></i><span>More</span></div>
+          </div>
+          <div class="heat-row">
+            <div class="heatmap" id="heatmap"></div>
+            <div class="heat-stats">
+              <div><div class="label">Days logged</div><div class="stat-value" id="heat-logged">0</div></div>
+              <div><div class="label">Perfect days</div><div class="stat-value" id="heat-perfect">0</div></div>
+              <div><div class="label">Current streak</div><div class="stat-value" id="heat-streak">0</div></div>
             </div>
           </div>
-        </div>
-      </section>
-    </main>
+        </section>
 
-    <main class="app-grid view view-analytics" id="view-analytics">
-      <section class="col full-width">
-        <div class="analytics-header">
-          <div><h1>Your Patterns</h1><p class="subtitle">Insights from how you actually show up</p></div>
-          <div class="view-switcher">
-            <button class="period-btn active" data-period="7" type="button">7 days</button>
-            <button class="period-btn" data-period="30" type="button">30 days</button>
-            <button class="period-btn" data-period="all" type="button">All time</button>
-          </div>
-        </div>
-        <div class="analytics-summary">
-          <div class="summary-card"><div class="summary-label">Tasks completed</div><div class="summary-value" id="summary-completed">0</div><div class="summary-trend" id="summary-completed-trend">Across selected period</div></div>
-          <div class="summary-card"><div class="summary-label">Completion rate</div><div class="summary-value" id="summary-rate">0%</div><div class="summary-trend" id="summary-rate-trend">Done vs planned</div></div>
-          <div class="summary-card"><div class="summary-label">Avg energy</div><div class="summary-value" id="summary-energy">—</div><div class="summary-trend">1–10 scale</div></div>
-          <div class="summary-card"><div class="summary-label">Longest streak</div><div class="summary-value" id="summary-streak">0</div><div class="summary-trend">Days in a row</div></div>
-        </div>
+        <section class="card patterns-card">
+          <div class="card-head"><div><h3>What Visionary noticed</h3><p class="subtitle">Computed from your data first, then explained</p></div></div>
+          <div class="pattern-grid" id="pattern-grid"></div>
+        </section>
+
         <div class="charts-grid">
-          <div class="card glass-card chart-card"><div class="card-header"><div><h3>Daily completion</h3><p class="subtitle">Tasks completed per day</p></div></div><div class="chart-wrap"><canvas id="chart-completion"></canvas></div></div>
-          <div class="card glass-card chart-card"><div class="card-header"><div><h3>Category mix</h3><p class="subtitle">Where your wins came from</p></div></div><div class="chart-wrap"><canvas id="chart-category"></canvas></div></div>
-          <div class="card glass-card chart-card chart-wide"><div class="card-header"><div><h3>Energy &amp; focus</h3><p class="subtitle">How you felt each day</p></div></div><div class="chart-wrap"><canvas id="chart-energy"></canvas></div></div>
+          <div class="card chart-card"><div class="card-head"><div><h3>Daily completion</h3><p class="subtitle">Tasks completed per day</p></div></div><div class="chart-wrap"><canvas id="chart-completion"></canvas></div></div>
+          <div class="card chart-card"><div class="card-head"><div><h3>Category mix</h3><p class="subtitle">Where your wins came from</p></div></div><div class="chart-wrap"><canvas id="chart-category"></canvas></div></div>
+          <div class="card chart-card chart-wide"><div class="card-head"><div><h3>Energy &amp; focus</h3><p class="subtitle">How you felt each day</p></div></div><div class="chart-wrap"><canvas id="chart-energy"></canvas></div></div>
         </div>
-        <div class="analytics-empty empty-state" id="analytics-empty"><div><div class="empty-icon">📊</div><p>Your patterns will show up here.</p><p class="subtitle">Complete tasks and save reflections to build history.</p></div></div>
-      </section>
-    </main>
+        <div class="analytics-empty empty-state" id="analytics-empty"><p><strong>Your patterns will show up here.</strong></p><p class="subtitle">Complete tasks and save reflections to build history.</p></div>
+      </main>
 
-    <div class="modal-backdrop" id="reflect-modal">
-      <div class="modal glass-card">
-        <div class="modal-header">
-          <div><h2>End of Day</h2><p class="subtitle">Quick reflection — takes 30 seconds</p></div>
-          <button class="icon-btn" id="reflect-close" type="button">✕</button>
+      <footer class="app-footer"><p>Built by a student who believed in the work · <a href="privacy.html">Privacy</a></p></footer>
+    </div>
+
+    <!-- Mobile tab bar -->
+    <nav class="tabbar" aria-label="Main mobile">
+      <button class="view-btn active" data-view="today" type="button"><svg class="i"><use href="#i-today"/></svg><span>Today</span></button>
+      <button class="view-btn" data-view="focus" type="button"><svg class="i"><use href="#i-timer"/></svg><span>Focus</span></button>
+      <button class="tab-reflect" id="reflect-btn-mobile" type="button" aria-label="Reflect"><svg class="i"><use href="#i-feather"/></svg></button>
+      <button class="view-btn" data-view="history" type="button"><svg class="i"><use href="#i-history"/></svg><span>History</span></button>
+      <button class="view-btn" data-view="analytics" type="button"><svg class="i"><use href="#i-chart"/></svg><span>Patterns</span></button>
+    </nav>
+  </div>
+
+  <!-- ================= MODALS ================= -->
+  <div class="modal-backdrop" id="reflect-modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reflect-title">
+      <div class="modal-head">
+        <div><p class="eyebrow">End of day</p><h2 id="reflect-title" class="modal-title">How did today go?</h2></div>
+        <button class="icon-btn" id="reflect-close" type="button" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ai-insight-area" id="ai-insight-area" style="display:none;">
+        <div class="label"><svg class="i"><use href="#i-sparkle"/></svg> Visionary noticed</div>
+        <div class="ai-insight-text" id="ai-insight-text"></div>
+      </div>
+      <div class="modal-body">
+        <div class="reflect-stats">
+          <div class="mini-stat"><div class="label">Completed</div><div class="mini-value"><span id="reflect-done">0</span> of <span id="reflect-total">0</span></div></div>
+          <div class="mini-stat"><div class="label">Rate</div><div class="mini-value"><span id="reflect-rate">0</span>%</div></div>
         </div>
-        <div class="ai-insight-area" id="ai-insight-area" style="display:none;">
-          <div class="ai-insight-label">Visionary noticed:</div>
-          <div class="ai-insight-text" id="ai-insight-text"></div>
+        <div class="reflect-field"><label for="energy-slider">Energy <span class="slider-val mono" id="energy-val">5</span></label><input type="range" min="1" max="10" value="5" id="energy-slider" class="slider"><div class="slider-hint"><span>Drained</span><span>Energized</span></div></div>
+        <div class="reflect-field"><label for="focus-slider">Focus <span class="slider-val mono" id="focus-val">5</span></label><input type="range" min="1" max="10" value="5" id="focus-slider" class="slider"><div class="slider-hint"><span>Scattered</span><span>Locked in</span></div></div>
+        <div class="reflect-field"><label for="reflect-note">One sentence about today <span class="subtitle">(optional)</span></label><textarea id="reflect-note" rows="2" placeholder="What worked? What didn't?"></textarea></div>
+        <button class="btn btn-primary btn-block" id="reflect-save" type="button">Save reflection</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="import-modal">
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="import-title">
+      <div class="modal-head">
+        <div><p class="eyebrow">Schedule import</p><h2 id="import-title" class="modal-title">Review what AI found</h2></div>
+        <button class="icon-btn" id="import-close" type="button" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="import-body">
+        <div class="import-preview"><img id="import-img" alt="Uploaded schedule"></div>
+        <div class="import-list-wrap">
+          <p class="subtitle" id="import-message">Scanning…</p>
+          <ul class="import-list" id="import-list"></ul>
         </div>
-        <div class="modal-body">
-          <div class="reflect-stats">
-            <div class="reflect-stat"><div class="reflect-stat-label">Completed</div><div class="reflect-stat-value"><span id="reflect-done">0</span> of <span id="reflect-total">0</span></div></div>
-            <div class="reflect-stat"><div class="reflect-stat-label">Rate</div><div class="reflect-stat-value"><span id="reflect-rate">0</span>%</div></div>
-          </div>
-          <div class="reflect-field"><label for="energy-slider">How was your energy today? <span class="slider-val" id="energy-val">5</span></label><input type="range" min="1" max="10" value="5" id="energy-slider" class="slider"><div class="slider-hint"><span>Drained</span><span>Energized</span></div></div>
-          <div class="reflect-field"><label for="focus-slider">How focused did you feel? <span class="slider-val" id="focus-val">5</span></label><input type="range" min="1" max="10" value="5" id="focus-slider" class="slider"><div class="slider-hint"><span>Scattered</span><span>Locked in</span></div></div>
-          <div class="reflect-field"><label for="reflect-note">One sentence about today (optional)</label><textarea id="reflect-note" rows="2" placeholder="What worked? What didn't?"></textarea></div>
-          <button class="btn-primary btn-block" id="reflect-save" type="button">Save reflection</button>
+      </div>
+      <div class="modal-foot">
+        <span class="subtitle" id="import-count">0 selected</span>
+        <div class="modal-foot-actions">
+          <button class="btn btn-ghost" id="import-cancel" type="button">Cancel</button>
+          <button class="btn btn-primary" id="import-confirm" type="button" disabled>Add to today</button>
         </div>
       </div>
     </div>
-
-    <footer><p>Built by a student who believed in the work. · <a href="privacy.html">Privacy</a></p></footer>
   </div>
+
+  <div class="modal-backdrop" id="whatsnew-modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="wn-title">
+      <div class="modal-head">
+        <div><p class="eyebrow">Visionary 4.0</p><h2 id="wn-title" class="modal-title">A new horizon</h2></div>
+        <button class="icon-btn" id="whatsnew-close" type="button" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+      <ul class="wn-list">
+        <li><svg class="i"><use href="#i-today"/></svg><div><strong>Day horizon</strong><p>Your day as an arc — the sun tracks the time and your scheduled tasks sit along it.</p></div></li>
+        <li><svg class="i"><use href="#i-timer"/></svg><div><strong>Focus sessions</strong><p>A built-in timer that can check a task off the moment you finish.</p></div></li>
+        <li><svg class="i"><use href="#i-scan"/></svg><div><strong>Scan schedule, with review</strong><p>Upload a photo of any schedule, edit what AI found, then import.</p></div></li>
+        <li><svg class="i"><use href="#i-chart"/></svg><div><strong>Consistency map &amp; pattern cards</strong><p>A 26‑week heatmap plus plain-language findings from your own data.</p></div></li>
+        <li><svg class="i"><use href="#i-command"/></svg><div><strong>Quick actions</strong><p>Press <kbd>Ctrl</kbd> <kbd>K</kbd> for everything. Type “gym at 6pm” and the time is set for you.</p></div></li>
+      </ul>
+      <button class="btn btn-primary btn-block" id="whatsnew-ok" type="button">Let's go</button>
+    </div>
+  </div>
+
+  <div class="cmdk-backdrop" id="cmdk">
+    <div class="cmdk" role="dialog" aria-modal="true" aria-label="Quick actions">
+      <div class="cmdk-input-row"><svg class="i"><use href="#i-command"/></svg><input id="cmdk-input" placeholder="Type a command, or a new task…" autocomplete="off"></div>
+      <ul class="cmdk-list" id="cmdk-list" role="listbox"></ul>
+      <div class="cmdk-foot"><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>Enter</kbd> run</span><span><kbd>Esc</kbd> close</span></div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script src="config.js"></script>
   <script src="auth.js"></script>
