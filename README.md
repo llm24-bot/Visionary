@@ -1,31 +1,59 @@
 # Visionary
 
-A calm daily planner: tasks, a live day horizon, focus sessions, 30-second reflections, and an AI coach. Plain HTML/CSS/JS on the front end, Supabase for auth + data, and a Supabase Edge Function (`ai-suggest`) that calls Claude.
+A calm daily planner: a live day timeline, focus sessions, 30-second reflections and an AI coach.
 
-## What's new in 4.0 — "Horizon"
+**Stack:** static HTML/CSS/JS on Vercel · Supabase (Postgres, Auth, Edge Functions) · Anthropic Claude for AI features.
 
-- **New look** — night-ink / first-light amber palette, Instrument Serif + Satoshi + JetBrains Mono, sidebar layout on desktop and a bottom tab bar on phones. Light mode is saved between visits.
-- **Day horizon** — the day drawn as an arc: the sun tracks the current time and scheduled tasks sit along it. Shows time left today and what's next.
-- **Focus sessions** — 25 / 50 / 10 minute timer with a dial, optional "mark task done when finished", and a daily session log (stored in the browser).
-- **Scan schedule, with review** — upload a photo/screenshot, the image is downscaled, sent to `ai-suggest` (`schedule-import`), and you can edit / uncheck / re-time each item before importing.
-- **Smart add** — type `gym at 6pm` or `study @ 14:00` and the time is set for you.
-- **Inline editing** — double-click a task to rename it; pick a time from the dropdown on each task (works on mobile, where drag-and-drop doesn't).
-- **Patterns page** — 26-week consistency heatmap plus rule-based pattern cards (plan size, energy, best weekday, category balance, week-over-week trend).
-- **Quick actions** — `Ctrl/⌘ K` command palette; `N` new task, `1–4` switch views.
-- **Demo mode** — "Explore the demo" on the sign-in screen runs the full app on seeded local data, no account needed.
-- **Fixes** — streaks now reset after a missed day, optimistic updates with rollback + toasts instead of silent console errors, boot splash so signed-in users don't see a flash of the login screen, more robust JSON parsing in the edge function.
+## Project structure
+
+```
+index.html              App (sign-in + planner)
+privacy.html            Privacy Policy
+terms.html              Terms of Service
+404.html                Custom not-found page
+css/                    style.css (design system), fonts.css (self-hosted fonts)
+js/
+  theme-init.js         Applies theme before first paint
+  config.js             Public client config (no secrets)
+  auth.js               Sign-in, sign-up, reset, lockout, validation
+  app.js                Planner, focus timer, patterns, AI, demo mode
+  account.js            Password change, sessions, export, delete account
+  consent.js            Cookie banner + consent-gated analytics
+vendor/                 Pinned, self-hosted supabase-js and Chart.js
+assets/                 Icons, fonts, social preview image
+supabase/
+  functions/_shared/    Origin allowlist, size limits, auth, security logging
+  functions/ai-suggest/ AI suggestions, insights, schedule scanning
+  functions/account/    Account deletion
+  migrations/           RLS, grants, sanitisation, AI quotas, security log
+vercel.json             Security headers, caching, clean URLs, redirects
+SECURITY.md             Security model + required dashboard settings
+docs/payments.md        Rules for adding payments later
+```
 
 ## Run locally
 
 ```bash
-python -m http.server 8000   # then open http://localhost:8000
+python3 -m http.server 8000   # open http://localhost:8000/
 ```
 
-## Deploy the edge function
+Use **Explore the demo** on the sign-in screen to try everything without an account.
 
-```bash
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-supabase functions deploy ai-suggest
-```
+## Deploy
 
-No database schema changes are required for 4.0.
+1. Push to `main` — Vercel deploys the static site.
+2. Run the SQL migration and deploy the edge functions — see [SECURITY.md](SECURITY.md).
+
+## Release notes
+
+### 4.1 — Trust & polish
+- New Privacy Policy and Terms of Service, cookie consent banner, custom 404 page.
+- Account center: change password (signs out other devices), sign out everywhere, download your data, delete your account.
+- Password reset with expiring links, clear error messages that don't reveal whether an email is registered, temporary lockout after repeated failed sign-ins, honeypot + optional Turnstile CAPTCHA.
+- Server hardening: Row Level Security, origin allowlist, request size limits, per-user AI quotas, image type checks, prompt-injection defenses, security event log.
+- Strict security headers (CSP, HSTS, frame blocking), self-hosted fonts and libraries, lazy-loaded charts.
+- SEO: page titles and descriptions, social preview image, favicons, web app manifest, sitemap and robots.txt.
+- WCAG AA color contrast in both themes, keyboard focus styles, tablet-friendly layouts.
+
+### 4.0 — Horizon
+- Redesign, day horizon, focus sessions, schedule scan with review, patterns heatmap, command palette, demo mode.

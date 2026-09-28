@@ -2,43 +2,213 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Privacy Policy — Visionary</title>
-  <script>try { document.documentElement.setAttribute('data-theme', localStorage.getItem('visionary-theme') || 'dark'); } catch (e) {}</script>
-  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <meta name="description" content="How Visionary collects, uses and protects your information, and the choices you have.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://visionary-llm24-bots-projects.vercel.app/privacy">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0c0d10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f0e8" media="(prefers-color-scheme: light)">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Visionary">
+  <meta property="og:title" content="Privacy Policy — Visionary">
+  <meta property="og:description" content="How Visionary collects, uses and protects your information, and the choices you have.">
+  <meta property="og:url" content="https://visionary-llm24-bots-projects.vercel.app/privacy">
+  <meta property="og:image" content="https://visionary-llm24-bots-projects.vercel.app/assets/og-image.jpg">
+  <meta property="og:image:alt" content="Visionary logo and the words Show up, on purpose, above a glowing horizon arc">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <script src="/js/theme-init.js"></script>
+  <link rel="preload" href="/assets/fonts/satoshi-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/instrument-serif-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/fonts.css">
+  <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
+<body class="doc-body">
   <div class="grain" aria-hidden="true"></div>
   <div class="horizon-glow" aria-hidden="true"></div>
-  <div class="policy-wrap">
-    <a class="brand" href="index.html" aria-label="Back to Visionary"><svg class="brand-mark" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 32a16 16 0 0 1 32 0"/><path d="M4 32h40"/><circle cx="24" cy="32" r="5" fill="currentColor" stroke="none"/></svg><span>Visionary</span></a>
-    <div>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="doc-top">
+    <a class="brand" href="/" aria-label="Visionary home"><svg class="brand-mark" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 32a16 16 0 0 1 32 0"/><path d="M4 32h40"/><circle cx="24" cy="32" r="5" fill="currentColor" stroke="none"/></svg><span>Visionary</span></a>
+    <nav aria-label="Site">
+      <a href="/privacy" aria-current="page" class="hide-sm">Privacy</a>
+      <a href="/terms" class="hide-sm">Terms</a>
+      <a class="btn btn-primary btn-sm" href="/">Open Visionary</a>
+    </nav>
+  </header>
+  <main class="doc" id="main">
+    <header class="doc-head">
+      <p class="eyebrow">Legal</p>
       <h1>Privacy Policy</h1>
-      <p class="eyebrow">Last updated: September 2026</p>
-      <p>Visionary is a personal productivity tool built by a college student and currently in early development. This policy explains what data is collected, where it is stored, and how it is used.</p>
-      <h2>What we collect</h2>
-      <p>When you create an account, Visionary stores your email address or the profile details returned by Google sign-in. When you use the app, it stores your tasks, scheduling choices, reflections, and related productivity data.</p>
-      <h2>Where it is stored</h2>
-      <p>Your account and app data are stored using Supabase. Data sent between your browser and the backend is protected over HTTPS.</p>
-      <h2>Passwords</h2>
-      <p>Your password is not stored in readable form. Passwords are hashed using a one-way cryptographic process handled by the authentication provider. If you sign in with Google, Visionary does not create a password for you.</p>
-      <h2>Who can access your data</h2>
-      <p>Other users should not be able to view your data. Visionary is intended to use per-user database access rules so each account can only access its own records. Because the app is operated by a solo developer, the developer may still be able to access stored data at the infrastructure level.</p>
-      <h2>Tracking and analytics</h2>
-      <p>Visionary does not currently use advertising trackers. If product analytics, sharing features, or third-party AI processing are added in a meaningful way later, this policy should be updated before those changes take effect.</p>
-      <h2>AI features</h2>
-      <p>When you use Suggest, reflection insights, or Scan schedule, the relevant tasks, recent reflection summaries, or the uploaded image are sent through a Supabase Edge Function to Anthropic's Claude API to generate a response. Uploaded schedule images are processed for that request only and are not saved by Visionary. Pattern cards on the Patterns page are computed in your browser.</p>
-      <h2>Stored in your browser</h2>
-      <p>Your theme choice, focus-session log, and demo-mode data are stored in your browser's local storage and never leave your device. Clearing site data removes them.</p>
-      <h2>Your choices</h2>
-      <p>You can stop using Visionary at any time. If you want your account and stored data removed, contact the developer and request deletion.</p>
-      <h2>Contact</h2>
-      <p>For questions or deletion requests, email <a href="mailto:louisl4764@gmail.com">louisl4764@gmail.com</a>.</p>
+      <div class="doc-meta"><span>Effective September 28, 2026</span><span>Last updated September 28, 2026</span></div>
+      <p class="lede">Visionary helps you plan your day. This policy explains, in plain language, what information we collect, why, who we share it with, and how you stay in control.</p>
+    </header>
+    <nav class="doc-toc" aria-label="On this page">
+      <p>On this page</p>
+      <a href="#who">Who we are</a>
+      <a href="#collect">Information we collect</a>
+      <a href="#use">How we use it</a>
+      <a href="#ai">AI features</a>
+      <a href="#providers">Service providers</a>
+      <a href="#cookies">Cookies and browser storage</a>
+      <a href="#retention">How long we keep data</a>
+      <a href="#security">How we protect your data</a>
+      <a href="#rights">Your rights and choices</a>
+      <a href="#children">Children</a>
+      <a href="#international">International users</a>
+      <a href="#changes">Changes to this policy</a>
+      <a href="#contact">Contact</a>
+    </nav>
+    <article class="doc-content">
+      <div class="doc-summary">
+        <h2>The short version</h2>
+        <ul>
+          <li>We collect your email, the tasks and reflections you create, and basic security data. That's it.</li>
+          <li>We never sell your data or use it for ads.</li>
+          <li>AI features only run when you use them, and schedule images aren't stored.</li>
+          <li>Analytics are anonymous, cookie-free, and off unless you allow them.</li>
+          <li>You can download or permanently delete your data from the app at any time.</li>
+        </ul>
+      </div>
+      <section id="who" aria-labelledby="who-h">
+        <h2 id="who-h"><span class="num">01</span>Who we are</h2>
+        <p>Visionary ("Visionary", "we", "us") is a daily planning web app operated by Louis Liu, an independent developer based in Missouri, United States. For the purposes of data protection law, we are the controller of the personal information described in this policy.</p>
+        <p>You can reach us at any time at <a href="mailto:louisl4764@gmail.com">louisl4764@gmail.com</a>.</p>
+      </section>
+      <section id="collect" aria-labelledby="collect-h">
+        <h2 id="collect-h"><span class="num">02</span>Information we collect</h2>
+        <p>We collect only what we need to run Visionary. We never ask for sensitive categories of data, and you shouldn't put them into tasks or reflections.</p>
+        <div class="doc-table-wrap"><table class="doc-table">
+          <thead><tr><th scope="col">Category</th><th scope="col">What it includes</th><th scope="col">Where it comes from</th></tr></thead>
+          <tbody>
+            <tr><td>Account</td><td>Email address, a securely hashed password (we never see or store it in readable form), and, if you use Google sign-in, your name and profile picture URL.</td><td>You, or Google when you choose "Continue with Google"</td></tr>
+            <tr><td>Your content</td><td>Tasks, categories, scheduled times, completion history, streaks, reflections (energy, focus and optional notes).</td><td>You</td></tr>
+            <tr><td>AI requests</td><td>The tasks and recent reflection summaries sent with a Suggest or insight request, or a schedule image you choose to scan.</td><td>You, when you use an AI feature</td></tr>
+            <tr><td>Security &amp; technical</td><td>Sign-in events, request timestamps, AI usage counts, and a one-way hash of your IP address used to detect abuse. Our hosting providers also keep short-lived server logs.</td><td>Automatically, when you use the service</td></tr>
+            <tr><td>Analytics (optional)</td><td>Anonymous, aggregated page views and performance metrics (for example, page load time, device type, country). No cookies and no cross-site identifiers.</td><td>Automatically, only if you choose "Allow analytics"</td></tr>
+            <tr><td>Messages</td><td>Anything you send us by email.</td><td>You</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+      <section id="use" aria-labelledby="use-h">
+        <h2 id="use-h"><span class="num">03</span>How we use it</h2>
+        <ul>
+          <li><strong>To provide the service</strong> — create your account, save and sync your data, and show your timeline, streaks and patterns. <em class="doc-basis">(Performance of our contract with you.)</em></li>
+          <li><strong>To power the AI features you request</strong> — generate a suggestion, an insight, or a list of tasks from a schedule image. <em class="doc-basis">(Contract.)</em></li>
+          <li><strong>To keep Visionary secure</strong> — prevent spam, brute-force sign-in attempts and abuse, enforce usage limits, and investigate incidents. <em class="doc-basis">(Our legitimate interest in protecting users and the service.)</em></li>
+          <li><strong>To improve Visionary</strong> — understand, in aggregate, which pages are used and how fast they load. <em class="doc-basis">(Your consent, which you can withdraw at any time.)</em></li>
+          <li><strong>To communicate with you</strong> — send account emails such as confirmation and password-reset links, and reply to your messages. <em class="doc-basis">(Contract and legitimate interest.)</em></li>
+          <li><strong>To meet legal obligations</strong> — respond to lawful requests and enforce our Terms. <em class="doc-basis">(Legal obligation.)</em></li>
+        </ul>
+        <p>We do not use your content for advertising, we do not build advertising profiles, and we do not make decisions about you that have legal or similarly significant effects based solely on automated processing.</p>
+      </section>
+      <section id="ai" aria-labelledby="ai-h">
+        <h2 id="ai-h"><span class="num">04</span>AI features</h2>
+        <p>Suggest, reflection insights and Scan schedule are optional. When you use one, the relevant data is sent from our server to Anthropic's Claude API to generate a response, and the result is returned to you.</p>
+        <ul>
+          <li>Only the data needed for that request is sent: your current tasks, up to 14 days of reflection summaries, or the single image you selected.</li>
+          <li>Images are resized and re-encoded in your browser before upload, which removes embedded metadata such as location. Visionary does not store the image after the scan finishes.</li>
+          <li>Anthropic processes this data as our service provider. Under its commercial terms, API data is not used to train its models, and it is retained only as long as its data retention policy allows.</li>
+          <li>AI output can be wrong. Treat it as a suggestion, not professional advice. Pattern cards on the Patterns page are calculated in your browser, not by AI.</li>
+        </ul>
+      </section>
+      <section id="providers" aria-labelledby="providers-h">
+        <h2 id="providers-h"><span class="num">05</span>Service providers</h2>
+        <p>We share personal information only with the providers that help us run Visionary, under contracts that limit how they can use it:</p>
+        <div class="doc-table-wrap"><table class="doc-table">
+          <thead><tr><th scope="col">Provider</th><th scope="col">Purpose</th><th scope="col">Data involved</th></tr></thead>
+          <tbody>
+            <tr><td>Supabase</td><td>Database, authentication and server functions</td><td>Account, content, security data</td></tr>
+            <tr><td>Vercel</td><td>Website hosting and delivery; optional cookie-free analytics</td><td>Technical data; anonymous analytics if you allow it</td></tr>
+            <tr><td>Anthropic</td><td>AI suggestions, insights and schedule scanning</td><td>AI requests</td></tr>
+            <tr><td>Google</td><td>"Continue with Google" sign-in, only if you use it</td><td>Account</td></tr>
+            <tr><td>Cloudflare</td><td>Bot protection on sign-in forms (Turnstile), when enabled</td><td>Technical data</td></tr>
+          </tbody>
+        </table></div>
+        <p>We may also disclose information if required by law, to protect the rights and safety of our users or others, or as part of a merger or transfer of the service, in which case this policy will continue to apply to your data.</p>
+      </section>
+      <section id="cookies" aria-labelledby="cookies-h">
+        <h2 id="cookies-h"><span class="num">06</span>Cookies and browser storage</h2>
+        <p>Visionary doesn't use advertising or cross-site tracking cookies. We use your browser's storage for the following:</p>
+        <div class="doc-table-wrap"><table class="doc-table">
+          <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Purpose</th><th scope="col">Duration</th></tr></thead>
+          <tbody>
+            <tr><td>sb-…-auth-token</td><td>Local storage · essential</td><td>Keeps you signed in</td><td>Until you sign out</td></tr>
+            <tr><td>vn_consent</td><td>Cookie · essential</td><td>Remembers your analytics choice (Secure, SameSite=Lax)</td><td>180 days</td></tr>
+            <tr><td>visionary-theme, visionary-seen-version</td><td>Local storage · essential</td><td>Remembers light/dark mode and which release notes you've seen</td><td>Until cleared</td></tr>
+            <tr><td>visionary-focus-…</td><td>Local storage · essential</td><td>Your focus-session log, stored only on this device</td><td>Until cleared</td></tr>
+            <tr><td>vn-auth-attempts, vn-reset-sent-at</td><td>Local storage · essential</td><td>Security: slows down repeated sign-in and reset attempts</td><td>Up to a few hours</td></tr>
+            <tr><td>visionary-demo-v4</td><td>Local storage · essential</td><td>Sample data for demo mode, stored only on this device</td><td>Until cleared</td></tr>
+            <tr><td>Vercel Web Analytics &amp; Speed Insights</td><td>Script · optional</td><td>Anonymous, cookie-free usage and performance measurement</td><td>Loaded only after you allow it</td></tr>
+          </tbody>
+        </table></div>
+        <p>You can change your choice at any time with <button type="button" class="link-inline" data-cookie-settings>Cookie settings</button>. We honor the Global Privacy Control signal: if your browser sends it, analytics stay off.</p>
+      </section>
+      <section id="retention" aria-labelledby="retention-h">
+        <h2 id="retention-h"><span class="num">07</span>How long we keep data</h2>
+        <ul>
+          <li><strong>Account and content</strong> — for as long as your account is active. When you delete your account, it is removed from our active systems immediately and from backups within 30 days.</li>
+          <li><strong>Security logs</strong> — up to 180 days, unless we need them longer to investigate a specific incident.</li>
+          <li><strong>AI usage counters</strong> — up to 90 days.</li>
+          <li><strong>Schedule images</strong> — not stored by Visionary after processing.</li>
+          <li><strong>Emails with us</strong> — as long as needed to resolve your request.</li>
+        </ul>
+      </section>
+      <section id="security" aria-labelledby="security-h">
+        <h2 id="security-h"><span class="num">08</span>How we protect your data</h2>
+        <p>All traffic is encrypted with HTTPS, and browsers are instructed to use HTTPS only (HSTS). Passwords are hashed by our authentication provider. Database rules ensure every account can read and change only its own records. We limit request sizes and AI usage, restrict which websites can call our servers, block repeated sign-in attempts, and log security events.</p>
+        <p>No system is perfectly secure. If we learn of a breach that affects your personal information, we will notify you and the relevant authorities as required by law. To report a vulnerability, email us. Our security contact is also listed at <a href="/.well-known/security.txt">/.well-known/security.txt</a>.</p>
+      </section>
+      <section id="rights" aria-labelledby="rights-h">
+        <h2 id="rights-h"><span class="num">09</span>Your rights and choices</h2>
+        <p>Wherever you live, you can:</p>
+        <ul>
+          <li><strong>Access and export</strong> your data at any time from <strong>Account → Download my data</strong>.</li>
+          <li><strong>Correct</strong> your data by editing it in the app.</li>
+          <li><strong>Delete</strong> your account and all associated data from <strong>Account → Delete account</strong>, or by emailing us.</li>
+          <li><strong>Withdraw consent</strong> to analytics with Cookie settings.</li>
+          <li><strong>Object</strong> to or ask us to restrict certain processing.</li>
+        </ul>
+        <p><strong>California residents.</strong> Under the CCPA/CPRA you have the right to know, delete, and correct personal information, and to not be discriminated against for exercising these rights. We do not sell or share personal information for cross-context behavioral advertising, and we do not use sensitive personal information to infer characteristics about you.</p>
+        <p><strong>EEA, UK and Swiss residents.</strong> You also have the right to data portability and to lodge a complaint with your local data protection authority.</p>
+        <p>To make a request, email <a href="mailto:louisl4764@gmail.com">louisl4764@gmail.com</a> from the address on your account. We will respond within 30 days (45 days where California law allows) and may need to verify your identity first. If we decline your request, you may appeal by replying to our decision.</p>
+      </section>
+      <section id="children" aria-labelledby="children-h">
+        <h2 id="children-h"><span class="num">10</span>Children</h2>
+        <p>Visionary is not directed to children under 13, and we do not knowingly collect personal information from them. If you are between 13 and the age of majority where you live, you may use Visionary only with permission from a parent or guardian. If you believe a child under 13 has created an account, contact us and we will delete it.</p>
+      </section>
+      <section id="international" aria-labelledby="international-h">
+        <h2 id="international-h"><span class="num">11</span>International users</h2>
+        <p>Visionary is operated from the United States, and our providers may process data in the United States and other countries. Where required, we rely on appropriate safeguards, such as the European Commission's Standard Contractual Clauses offered by our providers, for transfers of personal data.</p>
+      </section>
+      <section id="changes" aria-labelledby="changes-h">
+        <h2 id="changes-h"><span class="num">12</span>Changes to this policy</h2>
+        <p>We will update this policy when our practices change. If a change is material, we will tell you in the app or by email before it takes effect. The date at the top shows when it was last updated.</p>
+      </section>
+      <section id="contact" aria-labelledby="contact-h">
+        <h2 id="contact-h"><span class="num">13</span>Contact</h2>
+        <p>Questions, requests or concerns: <a href="mailto:louisl4764@gmail.com">louisl4764@gmail.com</a>. We aim to reply within a few business days.</p>
+      </section>
+    </article>
+  </main>
+  <footer class="doc-foot">
+    <span>© 2026 Visionary. Made in Rolla, Missouri.</span>
+    <nav aria-label="Legal"><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><button type="button" class="link-inline" data-cookie-settings>Cookie settings</button><a href="mailto:louisl4764@gmail.com">Contact</a></nav>
+  </footer>
+  <div class="consent" id="consent-banner" role="region" aria-label="Cookie preferences" hidden>
+    <div class="consent-text">
+      <strong>Your privacy, your call.</strong>
+      <p>We use essential browser storage to keep you signed in and remember your settings. With your permission we'd also like to measure anonymous, cookie-free page performance and usage so we can improve Visionary. <a href="/privacy#cookies">How we use cookies</a></p>
+    </div>
+    <div class="consent-actions">
+      <button class="btn btn-ghost btn-sm" type="button" id="consent-decline">Essential only</button>
+      <button class="btn btn-primary btn-sm" type="button" id="consent-accept">Allow analytics</button>
     </div>
   </div>
+  <script src="/js/consent.js"></script>
 </body>
 </html>

@@ -3,8 +3,9 @@
 // Cloud-synced with Supabase, plus a local demo mode.
 // ============================================
 
-const APP_VERSION = '4.0';
+const APP_VERSION = '4.1';
 const CATEGORIES = ['focus', 'health', 'learn', 'build', 'rest'];
+const LIMITS = Object.freeze({ task: 200, note: 1000 });
 const CATEGORY_LABELS = { focus: 'Focus', health: 'Health', learn: 'Learn', build: 'Build', rest: 'Rest' };
 
 // --- Helpers ---
@@ -209,6 +210,8 @@ function seedDemoData() {
 
 let demoDb = null;
 const db = () => (state.demo ? (demoDb ||= createDemoDb()) : supabaseClient);
+window.visionaryDb = db;
+window.visionaryCurrentUser = () => state.currentUser;
 
 // --- Date helpers ---
 function parseAppDate(value) {
@@ -635,7 +638,10 @@ async function handleAdd() {
 }
 
 async function createTask(raw, category = 'focus') {
-  const { text, hour } = parseTaskInput(raw);
+  const parsed = parseTaskInput(raw);
+  const text = cleanInput(parsed.text, LIMITS.task);
+  const hour = parsed.hour;
+  if (!text) { toast('Give the task a name first.', 'error'); return false; }
   const row = { user_id: state.currentUser.id, text, category, completed: false, date: todayISO() };
   if (hour !== null) row.scheduled_hour = hour;
   const { data, error } = await db().from('tasks').insert(row).select().single();
@@ -678,6 +684,7 @@ async function deleteTask(id) {
 
 async function updateTaskText(id, text) {
   const task = state.tasks.find(t => String(t.id) === String(id));
+  text = cleanInput(text, LIMITS.task);
   if (!task || !text || text === task.text) { renderTasks(); return; }
   const old = task.text;
   task.text = text;
@@ -947,7 +954,7 @@ function renderFocusDial() {
   btn.innerHTML = focus.running
     ? '<svg class="i"><use href="#i-pause"/></svg><span>Pause</span>'
     : `<svg class="i"><use href="#i-play"/></svg><span>${focus.remaining < focus.duration ? 'Resume' : 'Start focus'}</span>`;
-  document.title = focus.running ? `${label} · Visionary` : 'Visionary — Show up, on purpose';
+  document.title = focus.running ? `${label} · Visionary` : 'Visionary — Daily planner with focus timer and AI coaching';
 }
 
 function sessionsKey() { return `visionary-focus-${state.demo ? 'demo' : state.currentUser?.id || 'anon'}`; }
@@ -1026,7 +1033,7 @@ async function saveReflection() {
     rate: total ? done / total : 0,
     energy: parseInt(els.energySlider.value, 10),
     focus: parseInt(els.focusSlider.value, 10),
-    note: els.reflectNote.value.trim(),
+    note: cleanInput(els.reflectNote.value, LIMITS.note),
     categories: categoryBreakdown
   };
   els.reflectSave.disabled = true;
@@ -1083,9 +1090,11 @@ function renderAnalytics() {
   renderHeatmap();
   renderPatterns();
   if (hasData) {
-    renderChartCompletion(chartData);
-    renderChartCategory(filtered);
-    renderChartEnergy(chartData);
+    loadChartLibrary().then(() => {
+      renderChartCompletion(chartData);
+      renderChartCategory(filtered);
+      renderChartEnergy(chartData);
+    }).catch(() => { /* charts are optional; the rest of the page still renders */ });
   }
 }
 
@@ -1180,6 +1189,20 @@ function renderPatterns() {
     return;
   }
   grid.innerHTML = patterns.map(p => `<div class="pattern"><div class="pattern-fact">${p.fact}</div><p>${escapeHtml(p.text)}</p></div>`).join('');
+}
+
+// Chart.js (~200 KB) is only downloaded the first time the Patterns view opens.
+let chartLibraryPromise = null;
+function loadChartLibrary() {
+  if (window.Chart) return Promise.resolve();
+  chartLibraryPromise ||= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = '/vendor/chart-4.4.0.min.js';
+    s.onload = resolve;
+    s.onerror = () => { chartLibraryPromise = null; reject(new Error('chart load failed')); };
+    document.head.appendChild(s);
+  });
+  return chartLibraryPromise;
 }
 
 function getChartColors() {
@@ -1308,7 +1331,7 @@ async function copyDayToToday(date) {
   if (error) { toast("Couldn't read that day.", 'error'); return; }
   if (!pastTasks?.length) { toast('No tasks to copy from that day.'); return; }
   const today = todayISO();
-  const newTasks = pastTasks.map(t => ({ user_id: state.currentUser.id, text: t.text, category: t.category, completed: false, scheduled_hour: t.scheduled_hour, date: today }));
+  const newTasks = pastTasks.map(t => ({ user_id: state.currentUser.id, text: cleanInput(t.text, LIMITS.task), category: t.category, completed: false, scheduled_hour: t.scheduled_hour, date: today }));
   const { error: insertError } = await db().from('tasks').insert(newTasks);
   if (insertError) { toast("Couldn't copy those tasks.", 'error'); return; }
   await loadTasks();
@@ -1326,7 +1349,13 @@ async function callAI(mode, payload = {}) {
   const { data, error } = await supabaseClient.functions.invoke('ai-suggest', {
     body: { mode, payload: { tasks: state.tasks, history: state.history.slice(0, 14), currentHour: new Date().getHours(), ...payload } }
   });
-  if (error) throw error;
+  if (error) {
+    let message = error.message;
+    try { const body = await error.context?.json?.(); if (body?.error) message = body.error; } catch { /* not JSON */ }
+    const err = new Error(message);
+    err.status = error.context?.status;
+    throw err;
+  }
   if (data?.error) throw new Error(data.error);
   if (mode === 'schedule-import') return data;
   return data?.suggestion || data?.message || null;
@@ -1393,7 +1422,9 @@ async function handleAISuggest() {
     showAISuggestion(suggestion || localSuggestion());
   } catch (err) {
     console.error('AI call failed:', err);
-    showAISuggestion(localSuggestion());
+    // Quota/rate limits are shown as-is; anything else falls back to the offline coach.
+    if (err?.status === 429) showAISuggestion(err.message);
+    else showAISuggestion(localSuggestion());
   } finally {
     els.aiSuggestBtn.disabled = false;
     els.aiSuggestLabel.textContent = 'Suggest';
@@ -1424,7 +1455,10 @@ async function handleScheduleImageUpload(event) {
   const file = event?.target?.files?.[0];
   if (event?.target) event.target.value = '';
   if (!file || !state.currentUser) return;
-  if (!file.type.startsWith('image/')) { toast('Please choose an image file.', 'error'); return; }
+  const cfg = window.VISIONARY_CONFIG || {};
+  const allowed = cfg.allowedUploadTypes || ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  if (!allowed.includes(file.type)) { toast('Please choose a JPG, PNG, WebP or GIF image.', 'error'); return; }
+  if (file.size > (cfg.maxUploadMB || 15) * 1024 * 1024) { toast(`That image is over ${cfg.maxUploadMB || 15} MB. Try a screenshot instead.`, 'error'); return; }
 
   importItems = [];
   $('import-message').textContent = `Scanning ${file.name}…`;
@@ -1449,7 +1483,7 @@ async function handleScheduleImageUpload(event) {
     renderImportList();
   } catch (error) {
     console.error('Schedule import failed:', error);
-    $('import-message').textContent = 'The scan failed. Check that the ai-suggest function is deployed with an ANTHROPIC_API_KEY, then try again.';
+    $('import-message').textContent = [413, 415, 429].includes(error?.status) ? error.message : 'The scan failed. Please try again in a moment.';
     $('import-list').innerHTML = '';
     $('import-count').textContent = '';
   }
@@ -1484,13 +1518,13 @@ function updateImportCount() {
 }
 
 async function confirmImport() {
-  const chosen = importItems.filter(i => i.include && i.text.trim());
+  const chosen = importItems.filter(i => i.include && cleanInput(i.text, LIMITS.task));
   if (!chosen.length || !state.currentUser) return;
   $('import-confirm').disabled = true;
   $('import-confirm').textContent = 'Adding…';
   const rows = chosen.map(item => ({
     user_id: state.currentUser.id,
-    text: item.text.trim(),
+    text: cleanInput(item.text, LIMITS.task),
     category: CATEGORIES.includes(item.category) ? item.category : 'focus',
     completed: false,
     date: todayISO(),
@@ -1602,6 +1636,7 @@ function closeWhatsNew() {
 // ============================================
 // Utilities
 // ============================================
+window.visionaryToast = (...args) => toast(...args);
 function toast(message, type = 'info') {
   const wrap = $('toasts');
   if (!wrap) return;
@@ -1620,6 +1655,15 @@ function formatHour(hour) {
 function formatHourShort(hour) {
   const h = hour % 12 || 12;
   return `${h} ${hour < 12 ? 'AM' : 'PM'}`;
+}
+
+/** Normalises user text before it is stored: strips control/bidi characters, collapses whitespace, caps length. */
+function cleanInput(value, max = 200) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
 }
 
 function escapeHtml(str = '') {

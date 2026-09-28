@@ -1,11 +1,15 @@
+# Visionary — Supabase CLI config (functions only; auth settings live in the dashboard, see SECURITY.md)
 
 [functions.ai-suggest]
 enabled = true
+# Gateway rejects requests without a valid JWT. The function additionally
+# verifies it's a real signed-in user (the anon key alone is not enough).
 verify_jwt = true
 import_map = "./functions/ai-suggest/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/ai-suggest/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/ai-suggest/*.html" ]
+
+[functions.account]
+enabled = true
+verify_jwt = true
+import_map = "./functions/account/deno.json"
+entrypoint = "./functions/account/index.ts"

@@ -1,0 +1,7 @@
+# Only the static site is deployed. Keep source, backend code and docs off the CDN.
+supabase/
+docs/
+scripts/
+*.md
+.env*
+.git*

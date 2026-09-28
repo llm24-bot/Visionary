@@ -1,0 +1,5 @@
+Contact: mailto:louisl4764@gmail.com
+Expires: 2027-09-28T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://visionary-llm24-bots-projects.vercel.app/.well-known/security.txt
+Policy: https://visionary-llm24-bots-projects.vercel.app/privacy#security

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://visionary-llm24-bots-projects.vercel.app/sitemap.xml
