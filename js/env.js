@@ -16,6 +16,9 @@ window.VISIONARY_CONFIG = Object.freeze({
   supabaseUrl: 'https://emwwwpdbdczqywjgiuzf.supabase.co',
   supabasePublishableKey: 'sb_publishable_dAZIBBwcuBPl7fbdYV9GGw_rWGfYR7x',
 
+  // Site owner. Used only to show this account setup tips for the site editor.
+  ownerEmail: 'louisl4764@gmail.com',
+
   // Cloudflare Turnstile site key. Leave empty until CAPTCHA protection is
   // enabled in Supabase → Authentication → Attack Protection.
   turnstileSiteKey: '',

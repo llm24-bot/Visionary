@@ -26,6 +26,31 @@
     if (!error) logEvent('other_sessions_revoked', { reason: 'password_changed' });
   };
 
+  // Show "Edit website" to admins (and setup help to the site owner before setup).
+  async function refreshStudioAccess() {
+    const status = await window.visionarySiteAdminStatus?.();
+    const user = window.visionaryCurrentUser?.();
+    const owner = (window.VISIONARY_CONFIG?.ownerEmail || '').toLowerCase();
+    const isOwner = !!owner && (user?.email || '').toLowerCase() === owner;
+    const link = $('studio-link');
+    const section = $('account-studio');
+    const text = $('account-studio-text');
+    if (status === 'admin') {
+      if (link) link.hidden = false;
+      if (section) section.hidden = false;
+      if (text) text.textContent = "You're a site admin. Edit the landing page, What's new, Privacy Policy, Terms and more, right on the page.";
+    } else if (isOwner && status === 'not-set-up') {
+      if (link) link.hidden = false;
+      if (section) section.hidden = false;
+      if (text) text.textContent = 'One step left: run supabase/migrations/20260928010000_site_editor.sql in the Supabase SQL editor to turn on the site editor. Then reload this page.';
+    } else if (isOwner && status === 'not-admin') {
+      if (link) link.hidden = false;
+      if (section) section.hidden = false;
+      if (text) text.textContent = "Your account isn't on the admin list yet. Run the site editor migration again in Supabase (it adds your account), then reload.";
+    } else if (link) link.hidden = true;
+  }
+  window.visionaryRefreshStudioAccess = refreshStudioAccess;
+
   let lastFocus = null;
   function open() {
     lastFocus = document.activeElement;
@@ -40,7 +65,7 @@
     setMsg('account-delete-msg', '');
     $('account-delete-btn').disabled = true;
     $('account-studio').hidden = true;
-    if (!isDemo()) window.visionaryCheckSiteAdmin?.().then((ok) => { $('account-studio').hidden = !ok; });
+    if (!isDemo()) refreshStudioAccess();
     modal.classList.add('open');
     modal.querySelector('.modal-close')?.focus();
   }

@@ -329,6 +329,9 @@ window.visionaryOnSignedIn = async function (user) {
     await loadAllData();
     renderAll();
     maybeShowWhatsNew();
+    const studioLink = $('studio-link');
+    if (studioLink) studioLink.hidden = true;
+    if (!state.demo) window.visionaryRefreshStudioAccess?.();
   } finally {
     bootstrapping = false;
   }
@@ -477,6 +480,15 @@ function attachEventListeners() {
 
   // Focus timer
   document.querySelectorAll('.focus-presets .seg').forEach(b => b.addEventListener('click', () => setFocusDuration(Number(b.dataset.min))));
+  const minutesInput = $('focus-length-input');
+  minutesInput?.addEventListener('change', () => setFocusDuration(minutesInput.value));
+  minutesInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); setFocusDuration(minutesInput.value); minutesInput.blur(); } });
+  const step = (dir) => (e) => setFocusDuration(Math.round(focus.duration / 60) + dir * (e.shiftKey ? 5 : 1));
+  $('focus-minus')?.addEventListener('click', step(-1));
+  $('focus-plus')?.addEventListener('click', step(1));
+  bindFocusDialDrag();
+  const savedLen = store.get(FOCUS_LEN_KEY);
+  if (savedLen) setFocusDuration(savedLen, { quiet: true });
   $('focus-start')?.addEventListener('click', toggleFocus);
   $('focus-reset')?.addEventListener('click', resetFocus);
   $('focus-task')?.addEventListener('change', (e) => { focus.taskId = e.target.value || null; });
@@ -567,7 +579,16 @@ function applyTheme(theme, rerender = true) {
 }
 
 // --- Horizon arc ---
-const HZ = { cx: 320, base: 136, rx: 292, ry: 112 };
+const HZ = { w: 640, cx: 320, base: 136, rx: 292, ry: 112 };
+// Match the drawing to the card's real shape so the arc spans the full width.
+function sizeHorizon(svg) {
+  const w = svg.clientWidth, h = svg.clientHeight;
+  HZ.w = w && h ? Math.max(420, Math.round((170 * w) / h)) : 640;
+  HZ.cx = HZ.w / 2;
+  HZ.rx = HZ.w / 2 - 22;
+  svg.setAttribute('viewBox', `0 0 ${HZ.w} 170`);
+}
+let horizonResizeBound = false;
 function arcPoint(hourFloat) {
   const t = Math.max(0, Math.min(24, hourFloat)) / 24;
   const a = Math.PI * (1 - t);
@@ -577,6 +598,12 @@ function arcPoint(hourFloat) {
 function renderHorizon() {
   const svg = els.horizon;
   if (!svg) return;
+  sizeHorizon(svg);
+  if (!horizonResizeBound && window.ResizeObserver) {
+    horizonResizeBound = true;
+    let last = svg.clientWidth;
+    new ResizeObserver(() => { if (Math.abs(svg.clientWidth - last) > 4) { last = svg.clientWidth; renderHorizon(); } }).observe(svg);
+  }
   const now = new Date();
   const nowH = now.getHours() + now.getMinutes() / 60;
   const start = arcPoint(0);
@@ -607,7 +634,7 @@ function renderHorizon() {
     <defs>
       <linearGradient id="pastGrad" x1="0" x2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".15"/><stop offset="1" stop-color="var(--accent)"/></linearGradient>
     </defs>
-    <line x1="0" y1="${HZ.base}" x2="640" y2="${HZ.base}" class="ground"/>
+    <line x1="0" y1="${HZ.base}" x2="${HZ.w}" y2="${HZ.base}" class="ground"/>
     <path class="arc-future" d="M${start.x} ${HZ.base} A${HZ.rx} ${HZ.ry} 0 0 1 ${end.x} ${HZ.base}"/>
     <path class="arc-past" stroke="url(#pastGrad)" d="M${start.x} ${HZ.base} A${HZ.rx} ${HZ.ry} 0 0 1 ${sun.x.toFixed(2)} ${sun.y.toFixed(2)}"/>
     ${ticks}
@@ -883,12 +910,71 @@ function buildDialTicks() {
   g.innerHTML = html;
 }
 
-function setFocusDuration(min) {
-  if (focus.running) return toast('Pause or reset the current session first.');
-  focus.duration = min * 60;
+const FOCUS_MIN = 1, FOCUS_MAX = 240;
+const FOCUS_LEN_KEY = 'visionary-focus-length';
+function clampMinutes(v) { return Math.max(FOCUS_MIN, Math.min(FOCUS_MAX, Math.round(Number(v) || 0))); }
+
+function setFocusDuration(min, { quiet = false } = {}) {
+  if (focus.running || focus.remaining < focus.duration) {
+    if (!quiet) toast('Reset the current session to change its length.');
+    syncFocusLengthUI();
+    return;
+  }
+  const m = clampMinutes(min);
+  focus.duration = m * 60;
   focus.remaining = focus.duration;
-  document.querySelectorAll('.focus-presets .seg').forEach(b => b.classList.toggle('active', Number(b.dataset.min) === min));
+  store.set(FOCUS_LEN_KEY, m);
+  syncFocusLengthUI();
   renderFocusDial();
+}
+
+function syncFocusLengthUI() {
+  const m = Math.round(focus.duration / 60);
+  document.querySelectorAll('.focus-presets .seg').forEach(b => {
+    const on = Number(b.dataset.min) === m;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+  const input = $('focus-length-input');
+  if (input && document.activeElement !== input) input.value = m;
+  const locked = focus.running || focus.remaining < focus.duration;
+  document.querySelector('.focus-card')?.classList.toggle('length-locked', locked);
+  ['focus-minus', 'focus-plus', 'focus-length-input'].forEach(id => { const el = $(id); if (el) el.disabled = locked; });
+  document.querySelectorAll('.focus-presets .seg').forEach(b => { b.disabled = locked; });
+}
+
+// Drag around the dial like a kitchen timer: one lap = 60 minutes.
+function bindFocusDialDrag() {
+  const dial = document.querySelector('.focus-dial');
+  if (!dial) return;
+  let dragging = false, lastAngle = null, laps = 0;
+  const angleAt = (e) => {
+    const r = dial.getBoundingClientRect();
+    const a = Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2));
+    return ((a + Math.PI / 2) / (Math.PI * 2) + 1) % 1; // 0 at 12 o'clock, clockwise
+  };
+  dial.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('input, button')) return;
+    if (focus.running || focus.remaining < focus.duration) return;
+    const r = dial.getBoundingClientRect();
+    const dist = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
+    if (dist < r.width * 0.33) return; // only the ring, not the centre
+    dragging = true; dial.setPointerCapture(e.pointerId); dial.classList.add('dragging');
+    laps = 0; // pressing the ring sets the time where you touch; keep going round for more than an hour
+    lastAngle = angleAt(e);
+    setFocusDuration(Math.max(1, laps * 60 + Math.round(lastAngle * 60)), { quiet: true });
+  });
+  dial.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const a = angleAt(e);
+    if (lastAngle > 0.75 && a < 0.25) laps++;
+    if (lastAngle < 0.25 && a > 0.75) laps = Math.max(0, laps - 1);
+    lastAngle = a;
+    setFocusDuration(Math.max(1, laps * 60 + Math.round(a * 60)), { quiet: true });
+  });
+  const end = () => { dragging = false; dial.classList.remove('dragging'); };
+  dial.addEventListener('pointerup', end);
+  dial.addEventListener('pointercancel', end);
 }
 
 function toggleFocus() {
@@ -947,11 +1033,13 @@ function renderFocusDial() {
   const m = Math.floor(focus.remaining / 60), s = focus.remaining % 60;
   const label = `${pad(m)}:${pad(s)}`;
   $('focus-time').textContent = label;
-  const frac = focus.remaining / focus.duration;
+  // Up to an hour the ring reads like a kitchen timer (a full lap = 60 min).
+  const frac = focus.duration <= 3600 ? focus.remaining / 3600 : focus.remaining / focus.duration;
   $('dial-fill').style.strokeDasharray = String(DIAL_C);
   $('dial-fill').style.strokeDashoffset = String(DIAL_C * (1 - frac));
   const card = document.querySelector('.focus-card');
   card?.classList.toggle('running', focus.running);
+  syncFocusLengthUI();
   const task = state.tasks.find(t => String(t.id) === String(focus.taskId));
   $('focus-state').textContent = focus.running ? (task ? `On: ${task.text}` : 'In the zone') : (focus.remaining < focus.duration ? 'Paused' : 'Ready when you are');
   const btn = $('focus-start');

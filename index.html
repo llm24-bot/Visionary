@@ -57,6 +57,8 @@
       <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17l.7 1.8 1.8.7-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
       <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 9h10M7 13h10M7 17h6"/></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+      <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m14 6 4 4"/></symbol>
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
       <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
@@ -185,13 +187,16 @@
       <button class="cmdk-trigger" id="cmdk-open" type="button"><svg class="i"><use href="#i-command"/></svg><span>Quick actions</span><kbd id="cmdk-kbd">Ctrl K</kbd></button>
       <div class="side-foot">
         <button class="side-action" id="reflect-btn" type="button"><svg class="i"><use href="#i-feather"/></svg><span>End-of-day reflection</span></button>
+        <a class="side-action" id="studio-link" href="/studio" hidden><svg class="i"><use href="#i-pen"/></svg><span>Edit website</span><span class="pill-new pill-admin">Admin</span></a>
         <button class="side-action" id="whatsnew-btn" type="button"><svg class="i"><use href="#i-gift"/></svg><span>What's new</span><span class="pill-new" id="whatsnew-dot">New</span></button>
         <div class="side-user">
           <div class="avatar" id="user-avatar">V</div>
           <div class="side-user-meta"><div class="side-user-name" id="user-name">Signed in</div><div class="side-user-mode" id="user-mode">Cloud sync on</div></div>
-          <button class="icon-btn" type="button" data-open-account title="Account &amp; privacy" aria-label="Account and privacy"><svg class="i" aria-hidden="true"><use href="#i-user"/></svg></button>
-          <button class="icon-btn" id="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme"><svg class="i" id="theme-icon"><use href="#i-sun"/></svg></button>
-          <button class="icon-btn" id="logout-btn" type="button" title="Log out" aria-label="Log out"><svg class="i"><use href="#i-logout"/></svg></button>
+          <div class="side-user-actions">
+            <button class="icon-btn" type="button" data-open-account title="Account &amp; privacy" aria-label="Account and privacy"><svg class="i" aria-hidden="true"><use href="#i-user"/></svg></button>
+            <button class="icon-btn" id="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme"><svg class="i" id="theme-icon"><use href="#i-sun"/></svg></button>
+            <button class="icon-btn" id="logout-btn" type="button" title="Log out" aria-label="Log out"><svg class="i"><use href="#i-logout"/></svg></button>
+          </div>
         </div>
       </div>
     </aside>
@@ -302,10 +307,18 @@
         </header>
         <div class="focus-grid">
           <section class="card focus-card">
-            <div class="focus-presets" role="group" aria-label="Session length">
-              <button class="seg active" data-min="25" type="button">25 min</button>
-              <button class="seg" data-min="50" type="button">50 min</button>
-              <button class="seg" data-min="10" type="button">10 min</button>
+            <div class="focus-length">
+              <div class="focus-presets" role="group" aria-label="Quick lengths">
+                <button class="seg" data-min="15" type="button">15</button>
+                <button class="seg active" data-min="25" type="button">25</button>
+                <button class="seg" data-min="45" type="button">45</button>
+                <button class="seg" data-min="60" type="button">60</button>
+              </div>
+              <div class="focus-custom" role="group" aria-label="Custom length">
+                <button class="icon-btn" id="focus-minus" type="button" aria-label="One minute less" title="One minute less (Shift: 5)"><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg></button>
+                <label class="focus-minutes"><input id="focus-length-input" type="number" inputmode="numeric" min="1" max="240" step="1" value="25" aria-label="Session length in minutes"><span>min</span></label>
+                <button class="icon-btn" id="focus-plus" type="button" aria-label="One minute more" title="One minute more (Shift: 5)"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></button>
+              </div>
             </div>
             <div class="focus-dial">
               <svg viewBox="0 0 240 240" aria-hidden="true">
@@ -316,6 +329,7 @@
               <div class="dial-center">
                 <div class="dial-time mono" id="focus-time">25:00</div>
                 <div class="dial-label" id="focus-state">Ready when you are</div>
+                <div class="dial-hint" aria-hidden="true">Drag the ring to set any length</div>
               </div>
             </div>
             <label class="field focus-task-field"><span>Working on</span>
@@ -524,7 +538,7 @@
         </section>
         <section class="acct-section" id="account-studio" hidden>
           <h3>Site editor</h3>
-          <p class="subtitle">You're a site admin. Edit the landing page, What's new, Privacy Policy, Terms and more, right on the page.</p>
+          <p class="subtitle" id="account-studio-text">You're a site admin. Edit the landing page, What's new, Privacy Policy, Terms and more, right on the page.</p>
           <div class="acct-actions"><a class="btn btn-primary btn-sm" href="/studio">Open Studio</a><a class="btn btn-ghost btn-sm" href="/?edit">Edit landing page</a></div>
         </section>
         <section class="acct-section acct-danger" id="account-danger">

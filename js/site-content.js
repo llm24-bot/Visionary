@@ -211,14 +211,19 @@
     if (!res.ok) return false;
     return (await res.json()) === true;
   }
-  window.visionaryCheckSiteAdmin = async function () {
+  // Resolves to 'admin', 'not-admin', 'signed-out' or 'not-set-up' (migration not run yet).
+  window.visionarySiteAdminStatus = async function () {
     try {
       const token = await getToken();
-      const ok = !!token && await checkAdmin(token);
+      if (!token) return 'signed-out';
+      const res = await rest('rpc/is_site_admin', { method: 'POST', body: '{}', headers: { Authorization: `Bearer ${token}` } });
+      if (res.status === 404) return 'not-set-up';
+      const ok = res.ok && (await res.json()) === true;
       try { ok ? localStorage.setItem(ADMIN_FLAG, '1') : localStorage.removeItem(ADMIN_FLAG); } catch { /* ignore */ }
-      return ok;
-    } catch { return false; }
+      return ok ? 'admin' : 'not-admin';
+    } catch { return 'signed-out'; }
   };
+  window.visionaryCheckSiteAdmin = async () => (await window.visionarySiteAdminStatus()) === 'admin';
 
   // --------------------------------------------------------------------------
   // Storage for the editor (Supabase or, on localhost, this browser)
