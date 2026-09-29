@@ -19,6 +19,13 @@ from pg_policies where schemaname = 'public'
 and tablename in ('tasks', 'reflections', 'profiles');
 ```
 
+### 1b. Site editor (Studio)
+Run `supabase/migrations/20260928010000_site_editor.sql`. It makes the account `louisl4764@gmail.com` the first site admin (sign up with that email first if you haven't). To add another admin:
+```sql
+insert into public.site_admins (user_id)
+select id from auth.users where lower(email) = 'someone@example.com';
+```
+
 ### 2. Edge functions
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...            # never in the front end
@@ -73,7 +80,7 @@ supabase functions deploy account
 | **Prompt injection** | Rules in the system prompt; user data wrapped in `<user_data>` with `<`/`>` neutralised; inputs cleaned and truncated; output stripped of links/markup and length-capped; schedule JSON validated field by field. |
 | **AI usage caps** | `consume_ai_quota()` enforces per-user daily limits per mode and a per-minute burst limit atomically. |
 | **Security logging** | `security_events` records blocked origins, oversized/invalid uploads, quota hits, unauthenticated calls, password changes, session revocations, exports and deletions. IPs are stored only as salted hashes. |
-| **Admin routes** | There are none. The app has no admin UI; Supabase Studio is only reachable through your Supabase account. |
+| **Admin routes** | No default or hidden admin routes. The only admin tool is **Studio** (`/studio`, plus `?edit` on pages). The page itself holds no secrets; every write is checked by the database: `site_content` can only be changed by users listed in `site_admins` (RLS), admins can't be added from the browser, content is sanitised with a strict allowlist before saving and again before display, a database check rejects scripts/event handlers/`javascript:` links, and every change is versioned in `site_content_history` and logged in `security_events`. |
 | **Directory listing** | Vercel never lists directories; unknown paths return the custom 404. |
 | **Cookies** | Auth tokens are stored by supabase-js in localStorage (protected by the strict CSP). The only cookie, `vn_consent`, is `Secure; SameSite=Lax; Path=/`. |
 | **Payments** | Not used yet. See `docs/payments.md` for the required webhook-signature verification and server-side pricing pattern before adding any. |

@@ -11,6 +11,7 @@ index.html              App (sign-in + planner)
 privacy.html            Privacy Policy
 terms.html              Terms of Service
 404.html                Custom not-found page
+studio.html             Studio: site editor dashboard (admins only)
 css/                    style.css (design system), fonts.css (self-hosted fonts)
 js/
   theme-init.js         Applies theme before first paint
@@ -19,6 +20,9 @@ js/
   app.js                Planner, focus timer, patterns, AI, demo mode
   account.js            Password change, sessions, export, delete account
   consent.js            Cookie banner + consent-gated analytics
+  env.js                Public settings shared by every page
+  site-content.js       Loads published page edits + the in-page visual editor
+  studio.js             Studio dashboard
 vendor/                 Pinned, self-hosted supabase-js and Chart.js
 assets/                 Icons, fonts, social preview image
 supabase/
@@ -38,6 +42,15 @@ python3 -m http.server 8000   # open http://localhost:8000/
 ```
 
 Use **Explore the demo** on the sign-in screen to try everything without an account.
+
+## Editing the site (Studio)
+
+Sign in with an admin account, open **Account → Open Studio** (or go to `/studio`), and pick a page. You can also add `?edit` to any page URL.
+
+- Click any text and type. The toolbar adds bold, italic, links, headings and bullet lists.
+- Hover a block to drag it, move it up or down, add a new one below, duplicate it or delete it.
+- **Publish** (or Ctrl/Cmd+S) makes changes live for everyone. **History** restores earlier versions; **Restore original** brings back the text from the code.
+- Try it without an account on your computer: `http://localhost:8000/privacy?edit&local=1` (changes stay in that browser).
 
 ## Deploy
 

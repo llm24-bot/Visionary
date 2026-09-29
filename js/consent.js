@@ -54,7 +54,10 @@
 
   document.getElementById('consent-accept')?.addEventListener('click', () => choose('granted'));
   document.getElementById('consent-decline')?.addEventListener('click', () => choose('denied'));
-  document.querySelectorAll('[data-cookie-settings]').forEach((b) => b.addEventListener('click', show));
+  // Delegated so buttons added later (e.g. edited page content) work too.
+  document.addEventListener('click', (e) => {
+    if (e.target.closest?.('[data-cookie-settings]') && !e.target.closest('[contenteditable="true"]')) show();
+  });
   window.visionaryCookieSettings = show;
 
   const choice = readChoice();

@@ -43,7 +43,7 @@
   {"@context":"https://schema.org","@type":"WebApplication","name":"Visionary","url":"https://visionary-llm24-bots-projects.vercel.app/","applicationCategory":"ProductivityApplication","operatingSystem":"Web","description":"A calm daily planner with a live day timeline, focus sessions, reflections and AI coaching.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
   </script>
 </head>
-<body class="booting">
+<body class="booting" data-page="home">
   <!-- Icon sprite (Lucide-style strokes) -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
@@ -90,14 +90,14 @@
         <svg class="brand-mark" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 32a16 16 0 0 1 32 0"/><path d="M4 32h40"/><circle cx="24" cy="32" r="5" fill="currentColor" stroke="none"/></svg>
         <span>Visionary</span>
       </a>
-      <div class="auth-hero-copy">
+      <div class="auth-hero-copy" data-edit-region="landing-hero" data-edit-label="Landing page · headline">
         <p class="eyebrow">A daily practice, not a to‑do list</p>
         <h1 class="display">Show up,<br><em>on purpose.</em></h1>
         <p class="lede">Plan the day on a living horizon, protect deep work with focus sessions, and let a quiet AI coach spot the patterns you miss.</p>
         <ul class="auth-points">
-          <li><span class="dot" style="--c:var(--cat-focus)"></span>Drag tasks onto a timeline that follows the sun</li>
-          <li><span class="dot" style="--c:var(--cat-build)"></span>Snap a photo of any schedule — AI imports it</li>
-          <li><span class="dot" style="--c:var(--cat-health)"></span>Reflect in 30 seconds, see your patterns grow</li>
+          <li><span class="dot dot-focus"></span>Drag tasks onto a timeline that follows the sun</li>
+          <li><span class="dot dot-build"></span>Snap a photo of any schedule — AI imports it</li>
+          <li><span class="dot dot-health"></span>Reflect in 30 seconds, see your patterns grow</li>
         </ul>
       </div>
       <svg class="auth-horizon" viewBox="0 0 600 200" preserveAspectRatio="none" aria-hidden="true">
@@ -268,10 +268,10 @@
               <button id="add-btn" class="btn btn-primary" type="button" aria-label="Add task"><svg class="i"><use href="#i-plus"/></svg><span>Add</span></button>
             </div>
             <div class="chips" id="category-chips" role="radiogroup" aria-label="Category">
-              <button class="chip active" data-value="focus" role="radio" aria-checked="true" type="button"><span class="dot" style="--c:var(--cat-focus)"></span>Focus</button>
-              <button class="chip" data-value="health" role="radio" aria-checked="false" type="button"><span class="dot" style="--c:var(--cat-health)"></span>Health</button>
+              <button class="chip active" data-value="focus" role="radio" aria-checked="true" type="button"><span class="dot dot-focus"></span>Focus</button>
+              <button class="chip" data-value="health" role="radio" aria-checked="false" type="button"><span class="dot dot-health"></span>Health</button>
               <button class="chip" data-value="learn" role="radio" aria-checked="false" type="button"><span class="dot" style="--c:var(--cat-learn)"></span>Learn</button>
-              <button class="chip" data-value="build" role="radio" aria-checked="false" type="button"><span class="dot" style="--c:var(--cat-build)"></span>Build</button>
+              <button class="chip" data-value="build" role="radio" aria-checked="false" type="button"><span class="dot dot-build"></span>Build</button>
               <button class="chip" data-value="rest" role="radio" aria-checked="false" type="button"><span class="dot" style="--c:var(--cat-rest)"></span>Rest</button>
             </div>
 
@@ -469,10 +469,10 @@
   <div class="modal-backdrop" id="whatsnew-modal">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="wn-title">
       <div class="modal-head">
-        <div><p class="eyebrow">Visionary 4.1</p><h2 id="wn-title" class="modal-title">Safer, faster, yours</h2></div>
+        <div data-edit-region="whats-new-head" data-edit-label="What's new · heading"><p class="eyebrow">Visionary 4.1</p><h2 id="wn-title" class="modal-title">Safer, faster, yours</h2></div>
         <button class="icon-btn" id="whatsnew-close" type="button" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
-      <ul class="wn-list">
+      <ul class="wn-list" data-edit-region="whats-new-list" data-edit-label="What's new · list">
         <li><svg class="i"><use href="#i-user"/></svg><div><strong>Account center</strong><p>Change your password, sign out other devices, download your data, or delete your account — all in one place.</p></div></li>
         <li><svg class="i"><use href="#i-shield"/></svg><div><strong>Stronger sign-in</strong><p>Password reset, clearer errors, protection against repeated guesses, and your data locked to your account on the server.</p></div></li>
         <li><svg class="i"><use href="#i-bolt"/></svg><div><strong>Faster everywhere</strong><p>Fonts and libraries now load from Visionary itself, and charts load only when you open Patterns.</p></div></li>
@@ -522,6 +522,11 @@
           <div class="acct-actions"><button class="btn btn-ghost btn-sm" id="account-export-btn" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg><span>Download my data</span></button>
           <button class="btn btn-ghost btn-sm" type="button" data-cookie-settings>Cookie settings</button></div>
         </section>
+        <section class="acct-section" id="account-studio" hidden>
+          <h3>Site editor</h3>
+          <p class="subtitle">You're a site admin. Edit the landing page, What's new, Privacy Policy, Terms and more, right on the page.</p>
+          <div class="acct-actions"><a class="btn btn-primary btn-sm" href="/studio">Open Studio</a><a class="btn btn-ghost btn-sm" href="/?edit">Edit landing page</a></div>
+        </section>
         <section class="acct-section acct-danger" id="account-danger">
           <h3>Delete account</h3>
           <p class="subtitle">Permanently deletes your account, tasks, reflections and streaks. This can't be undone.</p>
@@ -547,10 +552,12 @@
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script src="/vendor/supabase-2.117.2.min.js" defer></script>
+  <script src="/js/env.js" defer></script>
   <script src="/js/config.js" defer></script>
   <script src="/js/auth.js" defer></script>
   <script src="/js/app.js" defer></script>
   <script src="/js/account.js" defer></script>
   <script src="/js/consent.js" defer></script>
+  <script src="/js/site-content.js" defer></script>
 </body>
 </html>

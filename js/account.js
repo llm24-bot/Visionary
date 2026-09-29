@@ -39,6 +39,8 @@
     setMsg('account-password-msg', '');
     setMsg('account-delete-msg', '');
     $('account-delete-btn').disabled = true;
+    $('account-studio').hidden = true;
+    if (!isDemo()) window.visionaryCheckSiteAdmin?.().then((ok) => { $('account-studio').hidden = !ok; });
     modal.classList.add('open');
     modal.querySelector('.modal-close')?.focus();
   }
