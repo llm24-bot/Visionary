@@ -59,6 +59,12 @@ Sign in with an admin account, open **Account → Open Studio** (or go to `/stud
 
 ## Release notes
 
+### Phone-style clocks
+- Timer: choose hours, minutes and seconds, from 00:00:01 to 99:59:59.
+- Stopwatch: independent start, pause, resume, reset and up to 100 recent laps.
+- Switching modes leaves clocks running; signing out stops both. Keep the page open: running clocks and laps do not survive reloads.
+- Countdown completion is checked against a timestamp, not counted interval ticks. Browser background suspension can delay the completion sound until the page resumes.
+
 ### 4.1 — Trust & polish
 - New Privacy Policy and Terms of Service, cookie consent banner, custom 404 page.
 - Account center: change password (signs out other devices), sign out everywhere, download your data, delete your account.

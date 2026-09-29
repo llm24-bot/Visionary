@@ -338,6 +338,10 @@ window.visionaryOnSignedIn = async function (user) {
 };
 
 window.visionaryOnSignedOut = function () {
+  clearInterval(focus.timer);
+  focus.running = false;
+  focus.remaining = focus.duration;
+  window.visionaryResetStopwatch?.();
   state.currentUser = null;
   state.tasks = [];
   state.history = [];
@@ -479,16 +483,17 @@ function attachEventListeners() {
   $('whatsnew-modal')?.addEventListener('click', (e) => { if (e.target.id === 'whatsnew-modal') closeWhatsNew(); });
 
   // Focus timer
-  document.querySelectorAll('.focus-presets .seg').forEach(b => b.addEventListener('click', () => setFocusDuration(Number(b.dataset.min))));
-  const minutesInput = $('focus-length-input');
-  minutesInput?.addEventListener('change', () => setFocusDuration(minutesInput.value));
-  minutesInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); setFocusDuration(minutesInput.value); minutesInput.blur(); } });
-  const step = (dir) => (e) => setFocusDuration(Math.round(focus.duration / 60) + dir * (e.shiftKey ? 5 : 1));
-  $('focus-minus')?.addEventListener('click', step(-1));
-  $('focus-plus')?.addEventListener('click', step(1));
-  bindFocusDialDrag();
-  const savedLen = store.get(FOCUS_LEN_KEY);
-  if (savedLen) setFocusDuration(savedLen, { quiet: true });
+  ['hours', 'minutes', 'seconds'].forEach((unit) => {
+    const select = $(`timer-${unit}`);
+    const count = unit === 'hours' ? 100 : 60;
+    for (let n = 0; n < count; n++) select.add(new Option(pad(n), String(n)));
+    select.addEventListener('change', () => setTimerSeconds(
+      Number($('timer-hours').value) * 3600 + Number($('timer-minutes').value) * 60 + Number($('timer-seconds').value)
+    ));
+  });
+  const savedSeconds = store.get('visionary-timer-seconds');
+  const oldMinutes = store.get('visionary-focus-length');
+  setTimerSeconds(Number.isInteger(savedSeconds) ? savedSeconds : (Number(oldMinutes) || 25) * 60);
   $('focus-start')?.addEventListener('click', toggleFocus);
   $('focus-reset')?.addEventListener('click', resetFocus);
   $('focus-task')?.addEventListener('change', (e) => { focus.taskId = e.target.value || null; });
@@ -823,7 +828,7 @@ function renderStats() {
   els.progressBar.style.width = pct + '%';
   const C = 2 * Math.PI * 18;
   els.progressRing.style.strokeDashoffset = String(C - (C * pct) / 100);
-  els.focusMinutes.textContent = todaysSessions().reduce((s, x) => s + x.minutes, 0);
+  els.focusMinutes.textContent = Math.round(todaysSessions().reduce((s, x) => s + x.minutes, 0) * 100) / 100;
 }
 
 // --- Timeline ---
@@ -910,77 +915,39 @@ function buildDialTicks() {
   g.innerHTML = html;
 }
 
-const FOCUS_MIN = 1, FOCUS_MAX = 240;
-const FOCUS_LEN_KEY = 'visionary-focus-length';
-function clampMinutes(v) { return Math.max(FOCUS_MIN, Math.min(FOCUS_MAX, Math.round(Number(v) || 0))); }
-
-function setFocusDuration(min, { quiet = false } = {}) {
+function setTimerSeconds(seconds) {
   if (focus.running || focus.remaining < focus.duration) {
-    if (!quiet) toast('Reset the current session to change its length.');
+    toast('Reset the current session to change its length.');
     syncFocusLengthUI();
     return;
   }
-  const m = clampMinutes(min);
-  focus.duration = m * 60;
+  focus.duration = Math.max(0, Math.min(359999, Math.floor(Number(seconds) || 0)));
   focus.remaining = focus.duration;
-  store.set(FOCUS_LEN_KEY, m);
+  store.set('visionary-timer-seconds', focus.duration);
   syncFocusLengthUI();
   renderFocusDial();
 }
 
+function setFocusDuration(min) { setTimerSeconds(min * 60); }
+
 function syncFocusLengthUI() {
-  const m = Math.round(focus.duration / 60);
-  document.querySelectorAll('.focus-presets .seg').forEach(b => {
-    const on = Number(b.dataset.min) === m;
-    b.classList.toggle('active', on);
-    b.setAttribute('aria-pressed', String(on));
-  });
-  const input = $('focus-length-input');
-  if (input && document.activeElement !== input) input.value = m;
+  $('timer-hours').value = Math.floor(focus.duration / 3600);
+  $('timer-minutes').value = Math.floor(focus.duration / 60) % 60;
+  $('timer-seconds').value = focus.duration % 60;
   const locked = focus.running || focus.remaining < focus.duration;
   document.querySelector('.focus-card')?.classList.toggle('length-locked', locked);
-  ['focus-minus', 'focus-plus', 'focus-length-input'].forEach(id => { const el = $(id); if (el) el.disabled = locked; });
-  document.querySelectorAll('.focus-presets .seg').forEach(b => { b.disabled = locked; });
-}
-
-// Drag around the dial like a kitchen timer: one lap = 60 minutes.
-function bindFocusDialDrag() {
-  const dial = document.querySelector('.focus-dial');
-  if (!dial) return;
-  let dragging = false, lastAngle = null, laps = 0;
-  const angleAt = (e) => {
-    const r = dial.getBoundingClientRect();
-    const a = Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2));
-    return ((a + Math.PI / 2) / (Math.PI * 2) + 1) % 1; // 0 at 12 o'clock, clockwise
-  };
-  dial.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('input, button')) return;
-    if (focus.running || focus.remaining < focus.duration) return;
-    const r = dial.getBoundingClientRect();
-    const dist = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
-    if (dist < r.width * 0.33) return; // only the ring, not the centre
-    dragging = true; dial.setPointerCapture(e.pointerId); dial.classList.add('dragging');
-    laps = 0; // pressing the ring sets the time where you touch; keep going round for more than an hour
-    lastAngle = angleAt(e);
-    setFocusDuration(Math.max(1, laps * 60 + Math.round(lastAngle * 60)), { quiet: true });
-  });
-  dial.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    const a = angleAt(e);
-    if (lastAngle > 0.75 && a < 0.25) laps++;
-    if (lastAngle < 0.25 && a > 0.75) laps = Math.max(0, laps - 1);
-    lastAngle = a;
-    setFocusDuration(Math.max(1, laps * 60 + Math.round(a * 60)), { quiet: true });
-  });
-  const end = () => { dragging = false; dial.classList.remove('dragging'); };
-  dial.addEventListener('pointerup', end);
-  dial.addEventListener('pointercancel', end);
+  $('timer-picker').disabled = locked;
+  $('focus-start').disabled = focus.duration === 0;
+  $('timer-note').textContent = locked ? 'Reset to choose a new duration.' : focus.duration === 0
+    ? 'Choose at least one second.' : 'Keep this page open while the timer runs.';
 }
 
 function toggleFocus() {
+  if (!focus.duration) return;
   if (focus.running) {
+    if (Date.now() >= focus.endAt) return completeFocus();
     focus.running = false;
-    focus.remaining = Math.max(0, Math.round((focus.endAt - Date.now()) / 1000));
+    focus.remaining = Math.max(0, (focus.endAt - Date.now()) / 1000);
     clearInterval(focus.timer);
   } else {
     if (focus.remaining <= 0) focus.remaining = focus.duration;
@@ -993,7 +960,7 @@ function toggleFocus() {
 }
 
 function tickFocus() {
-  focus.remaining = Math.max(0, Math.round((focus.endAt - Date.now()) / 1000));
+  focus.remaining = Math.max(0, (focus.endAt - Date.now()) / 1000);
   renderFocusDial();
   if (focus.remaining <= 0) completeFocus();
 }
@@ -1001,19 +968,20 @@ function tickFocus() {
 async function completeFocus() {
   clearInterval(focus.timer);
   focus.running = false;
-  const minutes = Math.round(focus.duration / 60);
+  const minutes = Math.round(focus.duration / 60 * 100) / 100;
   const task = state.tasks.find(t => String(t.id) === String(focus.taskId));
-  logSession(minutes, task?.text || 'Free focus');
+  logSession(minutes, task?.text || 'Free focus', focus.duration);
   chime();
   focus.remaining = focus.duration;
   renderFocusDial();
-  toast(`Session complete — ${minutes} minutes of focus.`);
+  toast(`Timer complete: ${formatTimerTime(focus.duration)} of focus.`);
   if (task && !task.completed && $('focus-complete-toggle')?.checked) await toggleTask(task.id);
   renderFocusPanel();
   renderStats();
 }
 
 function resetFocus() {
+  if (focus.running) focus.remaining = Math.max(0, (focus.endAt - Date.now()) / 1000);
   if (focus.running || focus.remaining < focus.duration) {
     const elapsed = Math.floor((focus.duration - focus.remaining) / 60);
     if (elapsed >= 1) {
@@ -1029,12 +997,16 @@ function resetFocus() {
   renderStats();
 }
 
+function formatTimerTime(seconds) {
+  const total = Math.ceil(seconds);
+  const h = Math.floor(total / 3600), m = Math.floor(total / 60) % 60, s = total % 60;
+  return h ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
 function renderFocusDial() {
-  const m = Math.floor(focus.remaining / 60), s = focus.remaining % 60;
-  const label = `${pad(m)}:${pad(s)}`;
+  const label = formatTimerTime(focus.remaining);
   $('focus-time').textContent = label;
-  // Up to an hour the ring reads like a kitchen timer (a full lap = 60 min).
-  const frac = focus.duration <= 3600 ? focus.remaining / 3600 : focus.remaining / focus.duration;
+  const frac = focus.duration ? focus.remaining / focus.duration : 0;
   $('dial-fill').style.strokeDasharray = String(DIAL_C);
   $('dial-fill').style.strokeDashoffset = String(DIAL_C * (1 - frac));
   const card = document.querySelector('.focus-card');
@@ -1045,7 +1017,7 @@ function renderFocusDial() {
   const btn = $('focus-start');
   btn.innerHTML = focus.running
     ? '<svg class="i"><use href="#i-pause"/></svg><span>Pause</span>'
-    : `<svg class="i"><use href="#i-play"/></svg><span>${focus.remaining < focus.duration ? 'Resume' : 'Start focus'}</span>`;
+    : `<svg class="i"><use href="#i-play"/></svg><span>${focus.remaining < focus.duration ? 'Resume' : 'Start timer'}</span>`;
   document.title = focus.running ? `${label} · Visionary` : 'Visionary — Daily planner with focus timer and AI coaching';
 }
 
@@ -1053,9 +1025,9 @@ let demoSessions = [];
 function sessionsKey() { return `visionary-focus-${state.currentUser?.id || 'anon'}`; }
 function allSessions() { return state.demo ? demoSessions : (store.get(sessionsKey(), []) || []); }
 function todaysSessions() { return allSessions().filter(s => s.date === todayISO()); }
-function logSession(minutes, label) {
+function logSession(minutes, label, seconds = Math.round(minutes * 60)) {
   const all = allSessions();
-  all.push({ date: todayISO(), at: Date.now(), minutes, label });
+  all.push({ date: todayISO(), at: Date.now(), minutes, seconds, label });
   if (state.demo) demoSessions = all.slice(-500);
   else store.set(sessionsKey(), all.slice(-500));
 }
@@ -1070,9 +1042,9 @@ function renderFocusPanel() {
   }
   const list = $('session-list');
   const sessions = todaysSessions().reverse();
-  list.innerHTML = sessions.map(s => `<li><span class="task-category-dot" style="--c:var(--accent)"></span><span>${escapeHtml(s.label)}</span><span class="mono">${new Date(s.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · ${s.minutes}m</span></li>`).join('');
+  list.innerHTML = sessions.map(s => `<li><span class="task-category-dot" style="--c:var(--accent)"></span><span>${escapeHtml(s.label)}</span><span class="mono">${new Date(s.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · ${formatTimerTime(s.seconds ?? Math.round(s.minutes * 60))}</span></li>`).join('');
   $('session-empty').classList.toggle('hidden', sessions.length > 0);
-  $('focus-total').textContent = `${sessions.reduce((a, s) => a + s.minutes, 0)} min`;
+  $('focus-total').textContent = `${Math.round(sessions.reduce((a, s) => a + s.minutes, 0) * 100) / 100} min`;
   renderFocusDial();
 }
 
@@ -1653,7 +1625,7 @@ function paletteCommands() {
     { group: 'Go to', icon: 'i-timer', label: 'Focus session', run: () => switchView('focus') },
     { group: 'Go to', icon: 'i-history', label: 'History', run: () => switchView('history') },
     { group: 'Go to', icon: 'i-chart', label: 'Patterns & analytics', run: () => switchView('analytics') },
-    { group: 'Actions', icon: 'i-play', label: focus.running ? 'Pause focus timer' : 'Start a 25-minute focus', run: () => { switchView('focus'); if (!focus.running) setFocusDuration(25); toggleFocus(); } },
+    { group: 'Actions', icon: 'i-play', label: focus.running ? 'Pause timer' : 'Start or resume timer', run: () => { switchView('focus'); $('mode-timer').click(); toggleFocus(); } },
     { group: 'Actions', icon: 'i-sparkle', label: 'Suggest my next action', run: () => { switchView('today'); handleAISuggest(); } },
     { group: 'Actions', icon: 'i-scan', label: 'Scan a schedule image', run: () => $('schedule-image-input').click() },
     { group: 'Actions', icon: 'i-feather', label: 'End-of-day reflection', run: openReflection },

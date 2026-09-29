@@ -38,6 +38,7 @@
   <link rel="preload" href="/assets/fonts/instrument-serif-400-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/css/fonts.css">
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/clock.css">
 
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"WebApplication","name":"Visionary","url":"https://visionary-llm24-bots-projects.vercel.app/","applicationCategory":"ProductivityApplication","operatingSystem":"Web","description":"A calm daily planner with a live day timeline, focus sessions, reflections and AI coaching.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}
@@ -307,19 +308,19 @@
         </header>
         <div class="focus-grid">
           <section class="card focus-card">
-            <div class="focus-length">
-              <div class="focus-presets" role="group" aria-label="Quick lengths">
-                <button class="seg" data-min="15" type="button">15</button>
-                <button class="seg active" data-min="25" type="button">25</button>
-                <button class="seg" data-min="45" type="button">45</button>
-                <button class="seg" data-min="60" type="button">60</button>
-              </div>
-              <div class="focus-custom" role="group" aria-label="Custom length">
-                <button class="icon-btn" id="focus-minus" type="button" aria-label="One minute less" title="One minute less (Shift: 5)"><svg class="i" aria-hidden="true"><use href="#i-minus"/></svg></button>
-                <label class="focus-minutes"><input id="focus-length-input" type="number" inputmode="numeric" min="1" max="240" step="1" value="25" aria-label="Session length in minutes"><span>min</span></label>
-                <button class="icon-btn" id="focus-plus" type="button" aria-label="One minute more" title="One minute more (Shift: 5)"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></button>
-              </div>
+            <div class="clock-modes" role="group" aria-label="Clock mode">
+              <button class="seg active" id="mode-timer" type="button" aria-pressed="true">Timer</button>
+              <button class="seg" id="mode-stopwatch" type="button" aria-pressed="false">Stopwatch</button>
             </div>
+            <div id="timer-panel" class="clock-panel">
+            <fieldset class="time-picker" id="timer-picker">
+              <legend>Set your duration</legend>
+              <label><select id="timer-hours" aria-label="Timer hours"></select><span>hours</span></label>
+              <span class="time-colon" aria-hidden="true">:</span>
+              <label><select id="timer-minutes" aria-label="Timer minutes"></select><span>minutes</span></label>
+              <span class="time-colon" aria-hidden="true">:</span>
+              <label><select id="timer-seconds" aria-label="Timer seconds"></select><span>seconds</span></label>
+            </fieldset>
             <div class="focus-dial">
               <svg viewBox="0 0 240 240" aria-hidden="true">
                 <circle cx="120" cy="120" r="104" class="dial-track"/>
@@ -329,16 +330,28 @@
               <div class="dial-center">
                 <div class="dial-time mono" id="focus-time">25:00</div>
                 <div class="dial-label" id="focus-state">Ready when you are</div>
-                <div class="dial-hint" aria-hidden="true">Drag the ring to set any length</div>
               </div>
             </div>
+            <p class="clock-note" id="timer-note" role="status">Choose a duration, then start.</p>
             <label class="field focus-task-field"><span>Working on</span>
               <select id="focus-task"><option value="">Free focus (no task)</option></select>
             </label>
             <div class="focus-controls">
               <button class="icon-btn lg" id="focus-reset" type="button" aria-label="Reset"><svg class="i"><use href="#i-reset"/></svg></button>
-              <button class="btn btn-primary btn-lg" id="focus-start" type="button"><svg class="i"><use href="#i-play"/></svg><span>Start focus</span></button>
+              <button class="btn btn-primary btn-lg" id="focus-start" type="button"><svg class="i"><use href="#i-play"/></svg><span>Start timer</span></button>
               <label class="toggle"><input type="checkbox" id="focus-complete-toggle" checked><span>Mark task done when finished</span></label>
+            </div>
+            </div>
+            <div id="stopwatch-panel" class="clock-panel" hidden>
+              <p class="clock-note">Count up, with no time limit.</p>
+              <div class="stopwatch-display mono" id="stopwatch-time" role="timer" aria-label="Stopwatch elapsed time">00:00<span>.00</span></div>
+              <p class="clock-note" id="stopwatch-status" role="status">Ready when you are</p>
+              <div class="stopwatch-controls">
+                <button class="btn btn-ghost" id="stopwatch-secondary" type="button" disabled>Reset</button>
+                <button class="btn btn-primary" id="stopwatch-start" type="button">Start</button>
+              </div>
+              <p class="clock-note">Stopwatch laps are temporary and aren't added to focus sessions. Keep this page open.</p>
+              <ol class="stopwatch-laps" id="stopwatch-laps" aria-label="Stopwatch laps"></ol>
             </div>
           </section>
           <section class="card">
@@ -570,6 +583,7 @@
   <script src="/js/config.js" defer></script>
   <script src="/js/auth.js" defer></script>
   <script src="/js/app.js" defer></script>
+  <script src="/js/stopwatch.js" defer></script>
   <script src="/js/account.js" defer></script>
   <script src="/js/consent.js" defer></script>
   <script src="/js/site-content.js" defer></script>
