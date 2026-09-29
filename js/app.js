@@ -90,10 +90,10 @@ let timelineScrolled = false;
 // Demo database — a tiny local stand-in for the Supabase query builder
 // ============================================
 function createDemoDb() {
-  const KEY = 'visionary-demo-v4';
-  let data = store.get(KEY) || seedDemoData();
-  const save = () => store.set(KEY, data);
-  save();
+  // Demo data lives in memory only, so every demo starts from the same fresh sample.
+  let data = seedDemoData();
+  const save = () => {};
+  try { localStorage.removeItem('visionary-demo-v4'); localStorage.removeItem('visionary-focus-demo'); } catch { /* ignore */ }
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
   const clone = (v) => JSON.parse(JSON.stringify(v));
 
@@ -348,13 +348,17 @@ window.visionaryOnSignedOut = function () {
 
 window.visionaryIsDemo = () => state.demo;
 window.visionaryStartDemo = async function () {
+  demoDb = null;          // always start from the original sample data
+  demoSessions = [];
   state.demo = true;
   document.body.classList.add('is-demo');
   window.showApp?.();
   await window.visionaryOnSignedIn({ id: 'demo', email: 'demo@visionary.app' });
-  toast('Welcome to the demo — everything stays in this browser.');
+  toast('Welcome to the demo. Try anything — it resets when you leave.');
 };
 window.visionaryExitDemo = function () {
+  demoDb = null;
+  demoSessions = [];
   state.demo = false;
   document.body.classList.remove('is-demo');
   window.visionaryOnSignedOut();
@@ -957,12 +961,15 @@ function renderFocusDial() {
   document.title = focus.running ? `${label} · Visionary` : 'Visionary — Daily planner with focus timer and AI coaching';
 }
 
-function sessionsKey() { return `visionary-focus-${state.demo ? 'demo' : state.currentUser?.id || 'anon'}`; }
-function todaysSessions() { return (store.get(sessionsKey(), []) || []).filter(s => s.date === todayISO()); }
+let demoSessions = [];
+function sessionsKey() { return `visionary-focus-${state.currentUser?.id || 'anon'}`; }
+function allSessions() { return state.demo ? demoSessions : (store.get(sessionsKey(), []) || []); }
+function todaysSessions() { return allSessions().filter(s => s.date === todayISO()); }
 function logSession(minutes, label) {
-  const all = store.get(sessionsKey(), []) || [];
+  const all = allSessions();
   all.push({ date: todayISO(), at: Date.now(), minutes, label });
-  store.set(sessionsKey(), all.slice(-500));
+  if (state.demo) demoSessions = all.slice(-500);
+  else store.set(sessionsKey(), all.slice(-500));
 }
 
 function renderFocusPanel() {
