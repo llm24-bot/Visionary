@@ -67,6 +67,26 @@ docs/                   ENGINEERING_NOTES.md (this file), payments.md
 
 ## 4. Release history
 
+### 5.0.1 — Hardening pass · 2026-10-27
+
+A review of 5.0 before the migration was run in production. Everything here is backwards compatible.
+
+**Database (`20261027000000_visionary_os.sql`, same file, re-runnable)**
+- Section 0 now creates `vn_clean_text` if it is missing, so the file runs on its own (it used to assume the 4.1 migration had been applied).
+- `vn_sanitize_task` also nulls `scheduled_minute` when `scheduled_hour` is null, rejects a task that is its own parent, and rejects a `parent_id` that belongs to another user. The trigger is dropped and recreated so re-running the file is safe.
+- `public_availability` treats completed tasks as busy too (a finished block still occupied that time) and widens its query window by a day on each side so timezone offsets never drop a day.
+- `request_booking` validates the slot server-side before touching rate limits: it must fall on an allowed weekday, inside the page's start/end hours (in the owner's timezone), on a 5-minute boundary, and must not collide with the owner's existing tasks plus buffer. Previously only the client enforced this.
+
+**Client**
+- Buffer routing actually fires now. The main input used to ignore the parser's category guess (the "Focus" chip always won), so "run" or "gym" never counted as a health block. The guess now wins until the user clicks a chip. When a deep-work block and a health/rest block are back to back, the new task is nudged by the buffer length and the buffer is inserted in the gap; the toast explains the move. Existing buffers are never duplicated.
+- The "Added" toast reports the final time (after any nudge) and warns when the new block overlaps something already on the timeline.
+- `scheduleTask` takes a `silent` option so the buffer router cannot recurse into itself.
+- Changing a task's length on a pre-5.0 database shows the setup hint instead of a generic error.
+- Account gains a **Setup** card that appears only when the app detects the database is behind (minute-level time, length or micro-step writes fall back). It lists the three manual steps.
+- Account → Export now includes `focus_sessions`, `booking_pages` and `booking_requests` (skipped quietly on older databases).
+
+**QA**: `/home/user/qa7.mjs` covers the buffer flow (nudge, insert, no duplicate, overlap warning), time inputs, History and the Setup card; the PGlite migration test adds weekend, off-hours, task-clash and foreign-parent cases plus a standalone run of the 5.0 file alone.
+
 ### 5.0 — "Visionary OS" · 2026-10-27
 
 The big one. Goal: merge the three product ideas above without breaking anything that already worked.

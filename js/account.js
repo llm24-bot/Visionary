@@ -116,17 +116,25 @@
     const btn = $('account-export-btn');
     btn.disabled = true;
     try {
-      const [tasks, reflections, profile] = await Promise.all([
+      // Tables added in 5.0 may not exist on an older database; export them when present.
+      const optional = (table) => db.from(table).select('*').eq('user_id', user.id).then(r => r.data || []).catch(() => []);
+      const [tasks, reflections, profile, sessions, bookingPages, bookingRequests] = await Promise.all([
         db.from('tasks').select('*').eq('user_id', user.id),
         db.from('reflections').select('*').eq('user_id', user.id),
-        db.from('profiles').select('*').eq('id', user.id)
+        db.from('profiles').select('*').eq('id', user.id),
+        optional('focus_sessions'),
+        optional('booking_pages'),
+        optional('booking_requests')
       ]);
       const payload = {
         exported_at: new Date().toISOString(),
         account: { id: user.id, email: user.email || null },
         profile: profile.data?.[0] || null,
         tasks: tasks.data || [],
-        reflections: reflections.data || []
+        reflections: reflections.data || [],
+        focus_sessions: sessions,
+        booking_pages: bookingPages,
+        booking_requests: bookingRequests
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');

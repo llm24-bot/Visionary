@@ -27,7 +27,7 @@ select id from auth.users where lower(email) = 'someone@example.com';
 ```
 
 ### 1c. Visionary OS (5.0)
-Run `supabase/migrations/20261027000000_visionary_os.sql`. Additive only: new task columns, `focus_sessions`, `booking_pages`, `booking_requests`, and two security-definer RPCs for the public booking page. `anon` can call `public_availability` (returns free/busy minutes only — never titles, notes or people) and `request_booking` (sanitised, clash-checked, rate-limited to 20 requests per page per hour and 3 per email per day); it has no table privileges.
+Run `supabase/migrations/20261027000000_visionary_os.sql`. Additive only: new task columns, `focus_sessions`, `booking_pages`, `booking_requests`, and two security-definer RPCs for the public booking page. `anon` can call `public_availability` (returns free/busy minutes only — never titles, notes or people) and `request_booking` (sanitised, validated server-side against the page's weekdays, hours and 5-minute grid in the owner's timezone, clash-checked against the owner's tasks plus buffer, rate-limited to 20 requests per page per hour and 3 per email per day); it has no table privileges.
 
 ### 2. Edge functions
 ```bash

@@ -51,7 +51,9 @@ const state = {
   graceDays: 0,
   lastGraceDate: null,
   /** Per-user preferences (mirrored to profiles.settings when signed in). */
-  settings: { autoBuffers: true, nudges: true, ambient: 'rain' }
+  settings: { autoBuffers: true, nudges: true, ambient: 'rain' },
+  /** True once the user has clicked a category chip this session; before that the parser may guess the category. */
+  categoryTouched: false
 };
 
 const els = {
@@ -572,7 +574,7 @@ function attachEventListeners() {
   els.addBtn?.addEventListener('click', handleAdd);
   els.taskInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleAdd(); });
 
-  document.querySelectorAll('#category-chips .chip').forEach(chip => chip.addEventListener('click', () => setCategory(chip.dataset.value)));
+  document.querySelectorAll('#category-chips .chip').forEach(chip => chip.addEventListener('click', () => { state.categoryTouched = true; setCategory(chip.dataset.value); }));
 
   document.querySelectorAll('.view-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
   document.querySelectorAll('[data-view-link]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); switchView(a.dataset.viewLink); }));
@@ -833,7 +835,8 @@ function renderHorizon() {
 async function handleAdd() {
   const raw = els.taskInput.value.trim();
   if (!raw || !state.currentUser) return;
-  const ok = await createTask(raw, state.selectedCategory);
+  // Until the user picks a chip themselves, let the parser's guess ("gym" → health, "read" → learn) win over the default.
+  const ok = await createTask(raw, state.selectedCategory, { useGuess: !state.categoryTouched });
   if (ok) { els.taskInput.value = ''; els.taskInput.focus(); }
 }
 
@@ -869,10 +872,19 @@ async function createTask(raw, category = 'focus', opts = {}) {
     renderFocusPanel();
   }
   if (!opts.silent) {
-    const when = hour !== null && hour !== undefined ? ` for ${Parse.formatTime(hour, minute || 0)}` : '';
+    // Report the final time (buffer routing may have nudged the task).
+    const when = task.scheduledHour !== null && task.scheduledHour !== undefined ? ` for ${Parse.formatTime(task.scheduledHour, task.scheduledMinute || 0)}` : '';
     const len = duration ? ` · ${Parse.formatDuration(duration)}` : '';
     const day = date === todayISO() ? '' : ` on ${formatAppDateLabel(date, { weekday: 'short', month: 'short', day: 'numeric' })}`;
-    toast(`Added${when}${len}${day}${people ? ` with ${people}` : ''}`);
+    // Gentle heads-up when the new block collides with something already on today's timeline.
+    let clash = '';
+    if (date === todayISO() && task.scheduledHour !== null && task.kind === 'task') {
+      const blocks = Sched.busyIntervals(state.tasks.filter(t => !t.completed && t.kind !== 'microstep'));
+      const me = blocks.find(b => String(b.id) === String(task.id));
+      const hit = me && blocks.find(b => b !== me && b.kind !== 'buffer' && b.start < me.end && b.end > me.start);
+      if (hit) clash = ` — overlaps “${hit.text}”`;
+    }
+    toast(`Added${when}${len}${day}${people ? ` with ${people}` : ''}${clash}`);
   }
   return task;
 }
@@ -882,13 +894,19 @@ async function createTask(raw, category = 'focus', opts = {}) {
  * the new columns so adding tasks never breaks; the user is told once.
  */
 let schemaWarned = false;
+/** Show the Setup card in Account once the database is known to be behind. */
+function flagSchemaOutdated() {
+  schemaWarned = true;
+  const sec = $('account-setup');
+  if (sec) sec.hidden = false;
+}
 async function insertTaskRow(row) {
   let res = await db().from('tasks').insert(row).select().single();
   if (res.error && /column|schema cache/i.test(res.error.message || '')) {
     const legacy = { user_id: row.user_id, text: row.text, category: row.category, completed: false, date: row.date };
     if (row.scheduled_hour !== undefined) legacy.scheduled_hour = row.scheduled_hour;
     res = await db().from('tasks').insert(legacy).select().single();
-    if (!res.error && !schemaWarned) { schemaWarned = true; toast('Minute-level times need the 5.0 database update. See Account → Setup.', 'error'); }
+    if (!res.error && !schemaWarned) { flagSchemaOutdated(); toast('Minute-level times need the 5.0 database update. See Account → Setup.', 'error'); }
   }
   return res;
 }
@@ -901,16 +919,47 @@ async function maybeAddBuffer(task) {
   const me = blocks.find(b => String(b.id) === String(task.id));
   if (!me) return;
   const minutes = Sched.bufferLength(state.history.slice(0, 7));
-  const prev = blocks.filter(b => b.end <= me.start + 1 && String(b.id) !== String(task.id)).sort((a, b) => b.end - a.end)[0];
-  const next = blocks.filter(b => b.start >= me.end - 1 && String(b.id) !== String(task.id)).sort((a, b) => a.start - b.start)[0];
-  const candidates = [prev && Sched.bufferBetween(prev, me, { minutes }), next && Sched.bufferBetween(me, next, { minutes })].filter(Boolean);
-  for (const buf of candidates) {
-    if (buf.end > 1440) continue;
-    const clash = blocks.some(b => b.start < buf.end && b.end > buf.start && b.kind !== 'buffer');
-    if (clash) continue;
-    const row = { user_id: state.currentUser.id, text: buf.text, category: buf.category, completed: false, date: todayISO(), scheduled_hour: Math.floor(buf.start / 60), scheduled_minute: buf.start % 60, duration_min: minutes, kind: 'buffer' };
+  const others = blocks.filter(b => String(b.id) !== String(task.id));
+  const prev = others.filter(b => b.end <= me.start + 1).sort((a, b) => b.end - a.end)[0];
+  const next = others.filter(b => b.start >= me.end - 1).sort((a, b) => a.start - b.start)[0];
+  const date = task.date || todayISO();
+  const overlaps = (iv, list) => list.some(b => b.start < iv.end && b.end > iv.start);
+  const insertBuffer = async (buf) => {
+    const row = { user_id: state.currentUser.id, text: buf.text, category: buf.category, completed: false, date, scheduled_hour: Math.floor(buf.start / 60), scheduled_minute: buf.start % 60, duration_min: minutes, kind: 'buffer' };
     const { data, error } = await db().from('tasks').insert(row).select().single();
-    if (!error && data) { state.tasks.push(normalizeTask(data)); toast(`Added a ${minutes}-minute buffer at ${Sched.label(buf.start)}.`); }
+    if (!error && data) { state.tasks.push(normalizeTask(data)); return true; }
+    return false;
+  };
+
+  // Case 1: the new block sits right after a block of the opposite kind -> shift it later to make room.
+  const before = prev && Sched.bufferBetween(prev, me, { minutes });
+  if (before) {
+    if (prev.end === me.start) {
+      const shifted = { start: me.start + minutes, end: me.end + minutes };
+      if (shifted.end <= 1440 && !overlaps(shifted, others)) {
+        await scheduleTask(task.id, Math.floor(shifted.start / 60), shifted.start % 60, { silent: true });
+        me.start = shifted.start; me.end = shifted.end;
+        if (await insertBuffer(before)) toast(`Moved “${task.text}” to ${Sched.label(shifted.start)} to leave a ${minutes}-minute ${before.category === 'rest' ? 'recovery' : 'travel'} buffer.`);
+        return;
+      }
+    } else if (!overlaps(before, blocks)) {
+      if (await insertBuffer(before)) toast(`Added a ${minutes}-minute buffer at ${Sched.label(before.start)}.`);
+      return;
+    }
+  }
+  // Case 2: the new block sits right before one -> pull it earlier if there is room, otherwise fit a buffer in the gap.
+  const after = next && Sched.bufferBetween(me, next, { minutes });
+  if (after) {
+    if (me.end === next.start) {
+      const shifted = { start: me.start - minutes, end: me.end - minutes };
+      if (shifted.start >= 0 && !overlaps(shifted, others)) {
+        await scheduleTask(task.id, Math.floor(shifted.start / 60), shifted.start % 60, { silent: true });
+        const buf = { ...after, start: shifted.end, end: shifted.end + minutes };
+        if (await insertBuffer(buf)) toast(`Moved “${task.text}” to ${Sched.label(shifted.start)} to leave a ${minutes}-minute ${after.category === 'rest' ? 'recovery' : 'travel'} buffer.`);
+      }
+    } else if (!overlaps(after, blocks)) {
+      if (await insertBuffer(after)) toast(`Added a ${minutes}-minute buffer at ${Sched.label(after.start)}.`);
+    }
   }
 }
 
@@ -967,7 +1016,8 @@ async function updateTaskText(id, text) {
 }
 
 /** Move a task to hour:minute (minute-precise) or unschedule it with hour = null. */
-async function scheduleTask(id, hour, minute = 0) {
+/** @param {{silent?: boolean}} [opts] silent: skip buffer routing (used by the buffer router itself) */
+async function scheduleTask(id, hour, minute = 0, opts = {}) {
   const task = state.tasks.find(t => String(t.id) === String(id));
   if (!task) return;
   const prev = { h: task.scheduledHour, m: task.scheduledMinute };
@@ -977,7 +1027,7 @@ async function scheduleTask(id, hour, minute = 0) {
   let { error } = await db().from('tasks').update({ scheduled_hour: hour, scheduled_minute: hour === null ? null : (minute || 0) }).eq('id', id);
   if (error && /column|schema cache/i.test(error.message || '')) ({ error } = await db().from('tasks').update({ scheduled_hour: hour }).eq('id', id));
   if (error) { console.error('Schedule failed:', error); task.scheduledHour = prev.h; task.scheduledMinute = prev.m; renderToday(); toast("Couldn't move that task.", 'error'); return; }
-  if (hour !== null && state.settings.autoBuffers && task.kind === 'task') await maybeAddBuffer(task);
+  if (hour !== null && !opts.silent && state.settings.autoBuffers && task.kind === 'task') await maybeAddBuffer(task);
 }
 
 const unscheduleTask = (id) => scheduleTask(id, null);
@@ -989,7 +1039,12 @@ async function setTaskDuration(id, minutes) {
   task.durationMin = minutes || null;
   renderToday();
   const { error } = await db().from('tasks').update({ duration_min: minutes || null }).eq('id', id);
-  if (error) { task.durationMin = prev; renderToday(); toast("Couldn't change the length.", 'error'); }
+  if (error) {
+    task.durationMin = prev; renderToday();
+    const outdated = /column|schema cache/i.test(error.message || '');
+    if (outdated) flagSchemaOutdated();
+    toast(outdated ? 'Lengths need the 5.0 database update. See Account → Setup.' : "Couldn't change the length.", 'error');
+  }
 }
 
 /** Micro-step decomposition: AI first, offline templates as fallback. */
@@ -1008,7 +1063,9 @@ async function breakDownTask(id) {
   const { data, error } = await db().from('tasks').insert(rows).select();
   if (error) {
     console.error('Micro-steps failed:', error);
-    toast(/column|schema cache|kind/i.test(error.message || '') ? 'Micro-steps need the 5.0 database update. See Account → Setup.' : "Couldn't save the steps.", 'error');
+    const outdated = /column|schema cache|kind/i.test(error.message || '');
+    if (outdated) flagSchemaOutdated();
+    toast(outdated ? 'Micro-steps need the 5.0 database update. See Account → Setup.' : "Couldn't save the steps.", 'error');
     return;
   }
   state.tasks.push(...(data || []).map(normalizeTask));

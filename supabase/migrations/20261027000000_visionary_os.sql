@@ -12,6 +12,27 @@
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
+-- 0. Prerequisite: vn_clean_text() comes from 20260928000000_security_hardening.sql.
+--    If that migration has not been run, a compatible copy is created here.
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  if not exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'vn_clean_text'
+  ) then
+    create function public.vn_clean_text(value text, max_len int)
+    returns text
+    language sql
+    immutable
+    set search_path = ''
+    as $f$
+      select left(btrim(regexp_replace(regexp_replace(coalesce(value, ''), '<[^>]*>', '', 'g'), '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', 'g')), max_len)
+    $f$;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- 1. tasks
 -- ---------------------------------------------------------------------------
 alter table public.tasks add column if not exists scheduled_minute smallint;
@@ -65,11 +86,25 @@ begin
   if new.scheduled_hour is not null and (new.scheduled_hour < 0 or new.scheduled_hour > 23) then
     new.scheduled_hour := null;
   end if;
+  if new.scheduled_minute is not null and new.scheduled_hour is null then
+    new.scheduled_minute := null;
+  end if;
   if new.people is not null then new.people := nullif(public.vn_clean_text(new.people, 200), ''); end if;
   if new.note   is not null then new.note   := nullif(public.vn_clean_text(new.note, 1000), ''); end if;
   if new.kind is null then new.kind := 'task'; end if;
+  if new.parent_id is not null then
+    if new.parent_id = new.id then
+      raise exception 'A task cannot be its own parent' using errcode = '22023';
+    end if;
+    if not exists (select 1 from public.tasks p where p.id = new.parent_id and p.user_id = new.user_id) then
+      raise exception 'Parent task not found' using errcode = '22023';
+    end if;
+  end if;
   return new;
 end $$;
+drop trigger if exists vn_sanitize_task on public.tasks;
+create trigger vn_sanitize_task before insert or update on public.tasks
+  for each row execute function public.vn_sanitize_task();
 
 -- ---------------------------------------------------------------------------
 -- 2. profiles — Momentum Grace
@@ -240,14 +275,14 @@ begin
            t.scheduled_hour * 60 + coalesce(t.scheduled_minute, 0) + coalesce(t.duration_min, 60) as e
     from public.tasks t
     where t.user_id = pg.user_id and t.scheduled_hour is not null
-      and t.date between p_from and p_to and not t.completed
+      and t.date between p_from and p_to
     union all
     select (r.starts_at at time zone pg.timezone)::date::text,
            extract(hour from r.starts_at at time zone pg.timezone)::int * 60 + extract(minute from r.starts_at at time zone pg.timezone)::int,
            extract(hour from r.starts_at at time zone pg.timezone)::int * 60 + extract(minute from r.starts_at at time zone pg.timezone)::int + r.duration_min
     from public.booking_requests r
     where r.page_id = pg.id and r.status <> 'declined'
-      and r.starts_at >= p_from::timestamptz and r.starts_at < (p_to + 1)::timestamptz
+      and r.starts_at >= (p_from - 1)::timestamptz and r.starts_at < (p_to + 2)::timestamptz
   ) b;
 
   return jsonb_build_object(
@@ -281,6 +316,8 @@ declare
   v_name   text := public.vn_clean_text(p_name, 80);
   v_email  text := lower(public.vn_clean_text(p_email, 254));
   v_note   text := nullif(public.vn_clean_text(p_note, 500), '');
+  v_local  timestamp;
+  v_min    int;
 begin
   select * into pg from public.booking_pages where slug = lower(p_slug) and active;
   if not found then return jsonb_build_object('ok', false, 'error', 'This booking link is not available.'); end if;
@@ -290,6 +327,23 @@ begin
   if p_starts_at > now() + (pg.horizon_days || ' days')::interval then
     return jsonb_build_object('ok', false, 'error', 'That date is too far ahead for this link.');
   end if;
+
+  -- The slot must fall on an allowed day and inside the page's hours (owner's time zone), on a 5-minute boundary.
+  v_local := p_starts_at at time zone pg.timezone;
+  v_min   := extract(hour from v_local)::int * 60 + extract(minute from v_local)::int;
+  if not (extract(dow from v_local)::smallint = any (pg.days)) then
+    return jsonb_build_object('ok', false, 'error', 'That day is not open for bookings.');
+  end if;
+  if v_min < pg.start_hour * 60 or v_min + pg.duration_min > pg.end_hour * 60 or v_min % 5 <> 0 then
+    return jsonb_build_object('ok', false, 'error', 'That time is outside the available hours.');
+  end if;
+
+  -- Clash check against the owner's own blocks that day (titles never leave this function).
+  select count(*) into clash from public.tasks t
+  where t.user_id = pg.user_id and t.date = v_local::date and t.scheduled_hour is not null
+    and (t.scheduled_hour * 60 + coalesce(t.scheduled_minute, 0)) < v_min + pg.duration_min + pg.buffer_min
+    and (t.scheduled_hour * 60 + coalesce(t.scheduled_minute, 0) + coalesce(t.duration_min, 60)) + pg.buffer_min > v_min;
+  if clash > 0 then return jsonb_build_object('ok', false, 'error', 'That slot is no longer free. Please pick another.'); end if;
 
   -- Rate limit: at most 20 requests per page per hour, 3 per email per day.
   select count(*) into recent from public.booking_requests where page_id = pg.id and created_at > now() - interval '1 hour';

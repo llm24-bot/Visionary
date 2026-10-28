@@ -1017,3 +1017,8 @@ body.zen .grain, body.zen .horizon-glow { opacity: 0.6; }
   .task-item.microstep .task-actions { flex: 0 0 auto; }
   .task-item.microstep .task-main { flex: 1 1 auto; }
 }
+
+/* 5.0.1 — Account → Setup card (shown only when the database is behind) */
+#account-setup .setup-steps { margin: 10px 0 0 18px; padding: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+#account-setup .setup-steps li + li { margin-top: 4px; }
+#account-setup code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; word-break: break-all; }

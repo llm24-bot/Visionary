@@ -605,6 +605,16 @@
           <p class="subtitle">A private page that shows only your free slots, never your task titles or notes. Requests land here for you to accept or decline.</p>
           <div class="acct-actions"><button class="btn btn-primary btn-sm" id="booking-open" type="button"><svg class="i" aria-hidden="true"><use href="#i-link"/></svg><span>Manage booking link</span></button></div>
         </section>
+        <section class="acct-section" id="account-setup" hidden>
+          <h3>Setup</h3>
+          <p class="subtitle">This database is missing the Visionary 5.0 update, so minute-level times, lengths, micro-steps, synced focus sessions and booking links fall back to the basics.</p>
+          <ol class="setup-steps">
+            <li>Open your Supabase project → <strong>SQL Editor</strong>.</li>
+            <li>Paste the contents of <code>supabase/migrations/20261027000000_visionary_os.sql</code> from the repository and press <strong>Run</strong>. It only adds tables and columns.</li>
+            <li>From the repository folder run <code>supabase functions deploy ai-suggest</code>.</li>
+            <li>Reload Visionary.</li>
+          </ol>
+        </section>
         <section class="acct-section" id="account-studio" hidden>
           <h3>Site editor</h3>
           <p class="subtitle" id="account-studio-text">You're a site admin. Edit the landing page, What's new, Privacy Policy, Terms and more, right on the page.</p>
