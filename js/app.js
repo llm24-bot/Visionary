@@ -1,9 +1,23 @@
+// @ts-check
 // ============================================
-// VISIONARY 4.0 — "Horizon"
+// VISIONARY 5.0 — "OS"
 // Cloud-synced with Supabase, plus a local demo mode.
+//
+// Module map (all plain scripts, loaded in order from index.html):
+//   js/parse.js      natural-language command + pasted-schedule parsing
+//   js/scheduler.js  free-slot search, smart buffers, hour scoring
+//   js/momentum.js   Momentum Grace, nudges, offline micro-steps
+//   js/shield.js     ambient sound + full-screen focus state
+//   js/app.js        (this file) state, data access, rendering, interactions
+//   js/stopwatch.js  count-up stopwatch with laps
+//   js/booking.js    owner-side booking links; book.html + js/book.js is the public page
 // ============================================
 
-const APP_VERSION = '4.1';
+const APP_VERSION = '5.0';
+const Parse = window.VisionaryParse;
+const Sched = window.VisionaryScheduler;
+const Momentum = window.VisionaryMomentum;
+const Shield = window.VisionaryShield;
 const CATEGORIES = ['focus', 'health', 'learn', 'build', 'rest'];
 const LIMITS = Object.freeze({ task: 200, note: 1000 });
 const CATEGORY_LABELS = { focus: 'Focus', health: 'Health', learn: 'Learn', build: 'Build', rest: 'Rest' };
@@ -31,7 +45,13 @@ const state = {
   currentView: 'today',
   analyticsPeriod: 7,
   currentUser: null,
-  demo: false
+  demo: false,
+  /** Past tasks (last 26 weeks) for correlation charts and hour scoring. */
+  pastTasks: [],
+  graceDays: 0,
+  lastGraceDate: null,
+  /** Per-user preferences (mirrored to profiles.settings when signed in). */
+  settings: { autoBuffers: true, nudges: true, ambient: 'rain' }
 };
 
 const els = {
@@ -80,6 +100,8 @@ const els = {
 let chartCompletion = null;
 let chartCategory = null;
 let chartEnergy = null;
+let chartEnergyCat = null;
+let chartHours = null;
 let selectedHistoryDate = null;
 let currentLoadedDate = todayISO();
 let bootstrapping = false;
@@ -105,17 +127,32 @@ function createDemoDb() {
     delete() { this.op = 'delete'; return this; }
     upsert(p, o = {}) { this.op = 'upsert'; this.payload = p; this.opts = o; return this; }
     eq(k, v) { this.filters.push([k, v]); return this; }
+    neq(k, v) { this.filters.push([k, v, 'neq']); return this; }
+    gte(k, v) { this.filters.push([k, v, 'gte']); return this; }
+    lte(k, v) { this.filters.push([k, v, 'lte']); return this; }
+    in(k, list) { this.filters.push([k, list, 'in']); return this; }
+    is(k, v) { this.filters.push([k, v, 'is']); return this; }
+    limit(n) { this.max = n; return this; }
     order(k, o = {}) { this.sort = [k, o.ascending !== false]; return this; }
     single() { this.one = true; return this; }
+    maybeSingle() { this.one = true; this.soft = true; return this; }
     then(resolve) {
       try { resolve(this.run()); } catch (error) { resolve({ data: null, error }); }
     }
     run() {
       const rows = (data[this.table] ||= []);
-      const match = (r) => this.filters.every(([k, v]) => String(r[k]) === String(v));
+      const match = (r) => this.filters.every(([k, v, op]) => {
+        if (op === 'neq') return String(r[k]) !== String(v);
+        if (op === 'gte') return String(r[k]) >= String(v);
+        if (op === 'lte') return String(r[k]) <= String(v);
+        if (op === 'in') return (v || []).map(String).includes(String(r[k]));
+        if (op === 'is') return v === null ? (r[k] === null || r[k] === undefined) : r[k] === v;
+        return String(r[k]) === String(v);
+      });
       const finish = (list) => {
-        const out = clone(list);
-        if (this.one) return out[0] ? { data: out[0], error: null } : { data: null, error: { message: 'Row not found' } };
+        let out = clone(list);
+        if (this.max) out = out.slice(0, this.max);
+        if (this.one) return out[0] ? { data: out[0], error: null } : { data: null, error: this.soft ? null : { message: 'Row not found' } };
         return { data: out, error: null };
       };
       if (this.op === 'select') {
@@ -136,7 +173,11 @@ function createDemoDb() {
         return finish(hit);
       }
       if (this.op === 'delete') {
-        data[this.table] = rows.filter(r => !match(r)); save();
+        const gone = rows.filter(match).map(r => String(r.id));
+        data[this.table] = rows.filter(r => !match(r));
+        // Mirror the database cascade: micro-steps go with their parent.
+        if (this.table === 'tasks') data.tasks = data.tasks.filter(r => !gone.includes(String(r.parent_id)));
+        save();
         return { data: null, error: null };
       }
       if (this.op === 'upsert') {
@@ -193,18 +234,39 @@ function seedDemoData() {
   const t = todayISO();
   const nowH = new Date().getHours();
   const todays = [
-    ['Gym — push day', 'health', Math.max(6, nowH - 3), true],
-    ['Digital logic notes', 'learn', Math.max(7, nowH - 1), true],
-    ['Ship Visionary feature', 'build', Math.min(22, nowH + 1), false],
-    ['Calculus problem set', 'learn', Math.min(23, nowH + 3), false],
-    ['Plan tomorrow', 'focus', null, false],
-    ['No-screen hour', 'rest', null, false]
+    ['Gym — push day', 'health', Math.max(6, nowH - 3), 0, 60, true, 'Aryan'],
+    ['Digital logic notes', 'learn', Math.max(7, nowH - 1), 30, 45, true, null],
+    ['Ship Visionary feature', 'build', Math.min(22, nowH + 1), 0, 90, false, null],
+    ['Calculus problem set', 'learn', Math.min(23, nowH + 3), 15, 60, false, null],
+    ['Plan tomorrow', 'focus', null, null, null, false, null],
+    ['No-screen hour', 'rest', null, null, 60, false, null]
   ];
-  todays.forEach(([text, category, hour, completed], i) => tasks.push({ id: `today-${i}`, user_id: user, text, category, completed, date: t, scheduled_hour: hour, created_at: new Date(Date.now() - (10 - i) * 60000).toISOString() }));
+  todays.forEach(([text, category, hour, minute, duration, completed, people], i) => tasks.push({ id: `today-${i}`, user_id: user, text, category, completed, date: t, scheduled_hour: hour, scheduled_minute: hour === null ? null : minute, duration_min: duration, kind: 'task', people, parent_id: null, created_at: new Date(Date.now() - (10 - i) * 60000).toISOString() }));
+  const sessions = [];
+  for (let back = 12; back >= 1; back--) {
+    const d = new Date(today); d.setDate(d.getDate() - back);
+    const n = 1 + Math.floor(rand() * 3);
+    for (let i = 0; i < n; i++) {
+      const category = CATEGORIES[Math.floor(rand() * 4)];
+      const early = category === 'learn' ? rand() < 0.7 : rand() < 0.2;
+      const minutes = early ? 35 + Math.floor(rand() * 20) : 25;
+      sessions.push({ id: `s-${back}-${i}`, user_id: user, date: isoOf(d), label: pick(pool[category]), category, seconds: minutes * 60, mode: 'timer', completed: !early, note: null, started_at: `${isoOf(d)}T${pad(9 + i * 3)}:00:00.000Z` });
+    }
+  }
+  const bookingPage = { id: 'bp-demo', user_id: user, slug: 'alex-demo', title: 'Office hours with Alex', duration_min: 30, buffer_min: 10, start_hour: 10, end_hour: 17, days: [1, 2, 3, 4, 5], horizon_days: 14, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', active: true, created_at: `${isoOf(new Date(today.getTime() - 20 * 86400000))}T12:00:00.000Z`, updated_at: `${isoOf(new Date(today.getTime() - 20 * 86400000))}T12:00:00.000Z` };
+  const nextDay = (n, h, m) => { const d = new Date(today); d.setDate(d.getDate() + n); d.setHours(h, m, 0, 0); return d; };
+  const bookingRequests = [
+    { id: 'br-1', page_id: 'bp-demo', user_id: user, requester_name: 'Priya N.', requester_email: 'priya@example.com', starts_at: nextDay(2, 14, 0).toISOString(), duration_min: 30, note: 'Quick review of the compiler project plan.', status: 'pending', created_at: new Date(Date.now() - 3 * 3600000).toISOString() },
+    { id: 'br-2', page_id: 'bp-demo', user_id: user, requester_name: 'Marcus D.', requester_email: 'marcus@example.com', starts_at: nextDay(3, 11, 30).toISOString(), duration_min: 30, note: null, status: 'pending', created_at: new Date(Date.now() - 26 * 3600000).toISOString() },
+    { id: 'br-0', page_id: 'bp-demo', user_id: user, requester_name: 'Sam O.', requester_email: 'sam@example.com', starts_at: nextDay(-4, 15, 0).toISOString(), duration_min: 30, note: null, status: 'accepted', created_at: new Date(Date.now() - 6 * 86400000).toISOString() }
+  ];
   return {
     tasks,
     reflections,
-    profiles: [{ id: user, streak: 4, longest_streak: 11, last_complete_date: yesterdayISO() }]
+    focus_sessions: sessions,
+    booking_pages: [bookingPage],
+    booking_requests: bookingRequests,
+    profiles: [{ id: user, streak: 4, longest_streak: 11, last_complete_date: yesterdayISO(), grace_days: 1, last_grace_date: null, settings: {} }]
   };
 }
 
@@ -237,36 +299,55 @@ function sortByAppDateAsc(items = []) {
 }
 
 // --- normalizeTask: single source of truth for mapping a DB row to app state ---
+/**
+ * @typedef {Object} Task
+ * @property {string|number} id
+ * @property {string} text
+ * @property {string} category
+ * @property {boolean} completed
+ * @property {number|null} scheduledHour
+ * @property {number|null} scheduledMinute
+ * @property {number|null} durationMin
+ * @property {'task'|'microstep'|'buffer'|'booking'} kind
+ * @property {string|number|null} parentId
+ * @property {string|null} people
+ * @property {string|null} note
+ * @property {string} date
+ * @property {number} createdAt
+ * @property {number|null} completedAt
+ */
+
+/** @param {any} t @returns {Task} */
 function normalizeTask(t) {
+  const hour = Number.isInteger(t.scheduled_hour) ? t.scheduled_hour : null;
   return {
     id: t.id,
     text: t.text,
     category: CATEGORIES.includes(t.category) ? t.category : 'focus',
     completed: !!t.completed,
-    scheduledHour: Number.isInteger(t.scheduled_hour) ? t.scheduled_hour : null,
+    scheduledHour: hour,
+    scheduledMinute: hour === null ? null : (Number.isInteger(t.scheduled_minute) ? t.scheduled_minute : 0),
+    durationMin: Number.isInteger(t.duration_min) && t.duration_min > 0 ? t.duration_min : null,
+    kind: ['task', 'microstep', 'buffer', 'booking'].includes(t.kind) ? t.kind : 'task',
+    parentId: t.parent_id ?? null,
+    people: t.people || null,
+    note: t.note || null,
+    date: t.date || todayISO(),
     createdAt: t.created_at ? new Date(t.created_at).getTime() : Date.now(),
     completedAt: t.completed_at ? new Date(t.completed_at).getTime() : null
   };
 }
 
-// "gym at 6pm", "study @ 14:00", "call mom 7 am" -> { text, hour }
+/** Start time in minutes from midnight, or null. */
+const startMinutes = (t) => (t.scheduledHour === null ? null : t.scheduledHour * 60 + (t.scheduledMinute || 0));
+/** Tasks that count toward progress (micro-steps roll up into their parent; buffers never count). */
+const countable = (t) => t.kind !== 'buffer' && t.kind !== 'microstep';
+const topLevel = (t) => t.kind !== 'microstep';
+
+// "gym with Aryan at 6pm for 45 mins" -> { text, hour, minute, duration, people, dateOffset, ... }
 function parseTaskInput(raw) {
-  let text = raw.trim();
-  let hour = null;
-  const re = /\s*(?:\b(?:at|@)\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*$|\s*(?:\bat\b|@)\s*(\d{1,2})(?::(\d{2}))?\s*$/i;
-  const m = text.match(re);
-  if (m) {
-    const h = Number(m[1] ?? m[4]);
-    const ampm = (m[3] || '').toLowerCase();
-    let hr = h;
-    if (ampm === 'pm' && h < 12) hr = h + 12;
-    if (ampm === 'am' && h === 12) hr = 0;
-    if (hr >= 0 && hr <= 23 && (ampm ? h >= 1 && h <= 12 : true)) {
-      hour = hr;
-      text = text.slice(0, m.index).trim() || text;
-    }
-  }
-  return { text, hour };
+  const p = Parse.parseCommand(raw);
+  return { text: p.text, hour: p.hour, minute: p.minute, duration: p.duration, people: p.people, dateOffset: p.dateOffset, intent: p.intent, category: p.category, part: p.part, after: p.after, before: p.before };
 }
 
 // ============================================
@@ -287,6 +368,7 @@ function init() {
     renderDate();
     renderHorizon();
     positionNowLine();
+    maybeNudge();
   }, 30000);
 
   // Reload data when the calendar day rolls over
@@ -329,6 +411,7 @@ window.visionaryOnSignedIn = async function (user) {
     await loadAllData();
     renderAll();
     maybeShowWhatsNew();
+    setTimeout(() => maybeNudge(), 4000);
     const studioLink = $('studio-link');
     if (studioLink) studioLink.hidden = true;
     if (!state.demo) window.visionaryRefreshStudioAccess?.();
@@ -348,8 +431,14 @@ window.visionaryOnSignedOut = function () {
   state.streak = 0;
   state.longestStreak = 0;
   state.lastCompleteDate = null;
+  state.pastTasks = [];
+  state.graceDays = 0;
+  state.lastGraceDate = null;
   selectedHistoryDate = null;
   timelineScrolled = false;
+  slotCache = { date: null, tasks: [] };
+  Shield.stop();
+  if (Shield.isZen()) Shield.exitZen();
   renderAll();
 };
 
@@ -391,7 +480,23 @@ async function ensureProfile(userId) {
 
 async function loadAllData() {
   if (!state.currentUser) return;
-  await Promise.all([loadTasks(), loadProfile(), loadHistory()]);
+  await Promise.all([loadTasks(), loadProfile(), loadHistory(), loadPastTasks(), loadCloudSessions()]);
+}
+
+/** Last 26 weeks of tasks (minus today) for hour scoring and correlation charts. */
+async function loadPastTasks() {
+  if (!state.currentUser) return;
+  const since = new Date(); since.setDate(since.getDate() - 26 * 7);
+  const { data, error } = await db()
+    .from('tasks')
+    .select('id, text, category, completed, date, scheduled_hour, scheduled_minute, duration_min, kind')
+    .eq('user_id', state.currentUser.id)
+    .gte('date', isoOf(since))
+    .neq('date', todayISO())
+    .order('date', { ascending: true })
+    .limit(2000);
+  if (error) { console.warn('Past tasks unavailable:', error.message); state.pastTasks = []; return; }
+  state.pastTasks = (data || []).map(normalizeTask);
 }
 
 async function loadTasks() {
@@ -413,6 +518,29 @@ async function loadProfile() {
   state.streak = data?.streak || 0;
   state.longestStreak = data?.longest_streak || 0;
   state.lastCompleteDate = data?.last_complete_date || null;
+  state.graceDays = data?.grace_days || 0;
+  state.lastGraceDate = data?.last_grace_date || null;
+  const saved = data?.settings && typeof data.settings === 'object' ? data.settings : {};
+  state.settings = { ...state.settings, ...store.get(settingsKey(), {}), ...saved };
+  syncSettingsUI();
+}
+
+/** Mirror persisted settings into the toggles and ambient buttons. */
+function syncSettingsUI() {
+  document.querySelectorAll('[data-setting]').forEach(el => {
+    const input = /** @type {HTMLInputElement} */ (el);
+    input.checked = Boolean(state.settings[input.dataset.setting || '']);
+  });
+  document.querySelectorAll('[data-ambient]').forEach(b => b.setAttribute('aria-pressed', String((/** @type {HTMLElement} */ (b)).dataset.ambient === (Shield.current() || 'off'))));
+}
+
+const settingsKey = () => `visionary-settings-${state.currentUser?.id || 'anon'}`;
+async function saveSetting(key, value) {
+  state.settings[key] = value;
+  store.set(settingsKey(), state.settings);
+  if (!state.currentUser) return;
+  const { error } = await db().from('profiles').update({ settings: state.settings }).eq('id', state.currentUser.id);
+  if (error) console.warn('Settings not synced (older database schema?):', error.message);
 }
 
 async function loadHistory() {
@@ -432,7 +560,8 @@ async function loadHistory() {
     energy: Number(h.energy || 0),
     focus: Number(h.focus || 0),
     note: h.note || '',
-    categories: h.categories || {}
+    categories: h.categories || {},
+    grace: !!h.grace
   }));
 }
 
@@ -498,6 +627,28 @@ function attachEventListeners() {
   $('focus-reset')?.addEventListener('click', resetFocus);
   $('focus-task')?.addEventListener('change', (e) => { focus.taskId = e.target.value || null; });
 
+  // Distraction shield: ambient audio, full-screen focus, session journal
+  document.querySelectorAll('[data-ambient]').forEach(btn => btn.addEventListener('click', () => setAmbient(/** @type {HTMLElement} */ (btn).dataset.ambient || 'off')));
+  $('zen-toggle')?.addEventListener('click', () => { Shield.isZen() ? Shield.exitZen() : Shield.enterZen(); });
+  $('zen-exit')?.addEventListener('click', () => Shield.exitZen());
+  $('journal-save')?.addEventListener('click', () => saveJournal(true));
+  $('journal-skip')?.addEventListener('click', () => saveJournal(false));
+  $('journal-modal')?.addEventListener('click', (e) => { if (/** @type {HTMLElement} */ (e.target).id === 'journal-modal') saveJournal(false); });
+  $('journal-note')?.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') saveJournal(true); });
+
+  // Settings toggles (Account modal)
+  document.querySelectorAll('[data-setting]').forEach(el => {
+    const input = /** @type {HTMLInputElement} */ (el);
+    const key = input.dataset.setting || '';
+    input.checked = Boolean(state.settings[key]);
+    input.addEventListener('change', () => saveSetting(key, input.checked));
+  });
+
+  // Text import + clipboard / drag-and-drop
+  $('import-text-btn')?.addEventListener('click', openTextImport);
+  $('import-parse')?.addEventListener('click', parsePastedText);
+  bindImportShortcuts();
+
   // Command palette
   $('cmdk')?.addEventListener('click', (e) => { if (e.target.id === 'cmdk') closePalette(); });
   $('cmdk-input')?.addEventListener('input', renderPalette);
@@ -512,6 +663,8 @@ function attachEventListeners() {
       if (els.reflectModal.classList.contains('open')) return closeReflection();
       if ($('import-modal').classList.contains('open')) return closeImport();
       if ($('whatsnew-modal').classList.contains('open')) return closeWhatsNew();
+      if ($('journal-modal')?.classList.contains('open')) return saveJournal(false);
+      if (Shield.isZen()) return Shield.exitZen();
     }
     if (document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')) return;
     if (document.querySelector('.modal-backdrop.open, .cmdk-backdrop.open')) return;
@@ -622,17 +775,26 @@ function renderHorizon() {
     return `<line x1="${p.x.toFixed(1)}" y1="${HZ.base}" x2="${p.x.toFixed(1)}" y2="${HZ.base + 5}" class="ground"/><text x="${p.x.toFixed(1)}" y="${HZ.base + 20}" text-anchor="middle" class="tick-label">${lbl}</text>`;
   }).join('');
 
-  const byHour = {};
-  const dots = state.tasks.filter(t => t.scheduledHour !== null).map(t => {
-    const idx = (byHour[t.scheduledHour] = (byHour[t.scheduledHour] ?? -1) + 1);
-    const p = arcPoint(t.scheduledHour + 0.5);
-    const off = idx * 13;
-    // Stack extra tasks in the same hour slightly inward (toward the center)
+  const scheduled = state.tasks.filter(t => t.scheduledHour !== null && topLevel(t)).sort((a, b) => (startMinutes(a) || 0) - (startMinutes(b) || 0));
+  // Duration blocks are drawn as arc segments just above the horizon line.
+  const spans = scheduled.filter(t => t.durationMin).map(t => {
+    const s = (startMinutes(t) || 0) / 60, e = Math.min(24, s + t.durationMin / 60);
+    const a = arcPoint(s), b = arcPoint(e);
+    const large = e - s > 12 ? 1 : 0;
+    return `<path class="task-span ${t.kind === 'buffer' ? 'buffer' : ''} ${t.completed ? 'done' : ''}" stroke="${catColor(t.category)}" d="M${a.x.toFixed(1)} ${a.y.toFixed(1)} A${HZ.rx} ${HZ.ry} 0 ${large} 1 ${b.x.toFixed(1)} ${b.y.toFixed(1)}"><title>${escapeHtml(Parse.formatTime(t.scheduledHour, t.scheduledMinute || 0))} · ${escapeHtml(Parse.formatDuration(t.durationMin))} · ${escapeHtml(t.text)}</title></path>`;
+  }).join('');
+  let lastX = -99, stack = 0;
+  const dots = scheduled.filter(t => t.kind !== 'buffer').map(t => {
+    const p = arcPoint((startMinutes(t) || 0) / 60);
+    stack = Math.abs(p.x - lastX) < 12 ? stack + 1 : 0;
+    lastX = p.x;
+    const off = stack * 13;
+    // Stack tasks that start close together slightly inward (toward the center)
     const dx = (HZ.cx - p.x), dy = (HZ.base - p.y);
     const len = Math.hypot(dx, dy) || 1;
     const x = p.x + (dx / len) * off, y = p.y + (dy / len) * off;
     const fill = t.completed ? catColor(t.category) : 'var(--surface)';
-    return `<circle class="task-dot ${t.completed ? 'done' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5.5" fill="${fill}" stroke="${catColor(t.category)}"><title>${escapeHtml(formatHour(t.scheduledHour))} · ${escapeHtml(t.text)}</title></circle>`;
+    return `<circle class="task-dot ${t.completed ? 'done' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5.5" fill="${fill}" stroke="${catColor(t.category)}"><title>${escapeHtml(Parse.formatTime(t.scheduledHour, t.scheduledMinute || 0))} · ${escapeHtml(t.text)}</title></circle>`;
   }).join('');
 
   svg.innerHTML = `
@@ -643,6 +805,7 @@ function renderHorizon() {
     <path class="arc-future" d="M${start.x} ${HZ.base} A${HZ.rx} ${HZ.ry} 0 0 1 ${end.x} ${HZ.base}"/>
     <path class="arc-past" stroke="url(#pastGrad)" d="M${start.x} ${HZ.base} A${HZ.rx} ${HZ.ry} 0 0 1 ${sun.x.toFixed(2)} ${sun.y.toFixed(2)}"/>
     ${ticks}
+    ${spans}
     ${dots}
     <circle class="sun-halo" cx="${sun.x.toFixed(1)}" cy="${sun.y.toFixed(1)}" r="16"/>
     <circle class="sun-core" cx="${sun.x.toFixed(1)}" cy="${sun.y.toFixed(1)}" r="7"/>
@@ -654,13 +817,14 @@ function renderHorizon() {
     ? 'The day is almost done. <em>Rest well.</em>'
     : `<em>${hL}h ${mL}m</em> of today left`;
 
-  const nowHour = now.getHours();
-  const upcoming = state.tasks.filter(t => !t.completed && t.scheduledHour !== null && t.scheduledHour >= nowHour).sort((a, b) => a.scheduledHour - b.scheduledHour)[0];
-  const anytime = state.tasks.find(t => !t.completed && t.scheduledHour === null);
-  const overdue = state.tasks.filter(t => !t.completed && t.scheduledHour !== null && t.scheduledHour < nowHour).length;
-  if (upcoming) els.nextUp.textContent = `${formatHour(upcoming.scheduledHour)} · ${upcoming.text}`;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const real = state.tasks.filter(countable);
+  const upcoming = real.filter(t => !t.completed && startMinutes(t) !== null && (startMinutes(t) || 0) + (t.durationMin || 0) >= nowMin).sort((a, b) => (startMinutes(a) || 0) - (startMinutes(b) || 0))[0];
+  const anytime = real.find(t => !t.completed && t.scheduledHour === null);
+  const overdue = real.filter(t => !t.completed && startMinutes(t) !== null && (startMinutes(t) || 0) + (t.durationMin || 0) < nowMin).length;
+  if (upcoming) els.nextUp.textContent = `${Parse.formatTime(upcoming.scheduledHour, upcoming.scheduledMinute || 0)} · ${upcoming.text}${upcoming.people ? ` with ${upcoming.people}` : ''}`;
   else if (anytime) els.nextUp.textContent = `Anytime · ${anytime.text}`;
-  else if (state.tasks.length && state.tasks.every(t => t.completed)) els.nextUp.textContent = 'All clear — nice work';
+  else if (real.length && real.every(t => t.completed)) els.nextUp.textContent = 'All clear — nice work';
   else if (overdue) els.nextUp.textContent = `${overdue} earlier task${overdue > 1 ? 's' : ''} still open`;
   else els.nextUp.textContent = 'Nothing scheduled';
 }
@@ -673,20 +837,81 @@ async function handleAdd() {
   if (ok) { els.taskInput.value = ''; els.taskInput.focus(); }
 }
 
-async function createTask(raw, category = 'focus') {
+/**
+ * Create a task from natural language ("gym with Aryan at 6pm for 45 mins").
+ * @param {string} raw
+ * @param {string} [category]  falls back to the parser's guess, then 'focus'
+ * @param {{date?:string, hour?:number|null, minute?:number|null, duration?:number|null, kind?:string, parentId?:any, people?:string|null, silent?:boolean, useGuess?:boolean}} [opts]
+ */
+async function createTask(raw, category = 'focus', opts = {}) {
   const parsed = parseTaskInput(raw);
   const text = cleanInput(parsed.text, LIMITS.task);
-  const hour = parsed.hour;
   if (!text) { toast('Give the task a name first.', 'error'); return false; }
-  const row = { user_id: state.currentUser.id, text, category, completed: false, date: todayISO() };
-  if (hour !== null) row.scheduled_hour = hour;
-  const { data, error } = await db().from('tasks').insert(row).select().single();
+  const hour = opts.hour !== undefined ? opts.hour : parsed.hour;
+  const minute = opts.minute !== undefined ? opts.minute : parsed.minute;
+  const duration = opts.duration !== undefined ? opts.duration : parsed.duration;
+  const people = opts.people !== undefined ? opts.people : parsed.people;
+  const date = opts.date || offsetISO(parsed.dateOffset || 0);
+  const cat = CATEGORIES.includes(category) && !(opts.useGuess && parsed.category) ? category : (parsed.category || 'focus');
+  const row = { user_id: state.currentUser.id, text, category: cat, completed: false, date };
+  if (hour !== null && hour !== undefined) { row.scheduled_hour = hour; row.scheduled_minute = minute || 0; }
+  if (duration) row.duration_min = Math.min(1440, duration);
+  if (people) row.people = cleanInput(people, 200);
+  if (opts.kind && opts.kind !== 'task') row.kind = opts.kind;
+  if (opts.parentId) row.parent_id = opts.parentId;
+  const { data, error } = await insertTaskRow(row);
   if (error) { console.error('Add failed:', error); toast("Couldn't save that task. Check your connection.", 'error'); return false; }
-  state.tasks.push(normalizeTask(data));
-  renderToday();
-  renderFocusPanel();
-  if (hour !== null) toast(`Added and scheduled for ${formatHour(hour)}`);
-  return true;
+  const task = normalizeTask(data);
+  if (date === todayISO()) {
+    state.tasks.push(task);
+    if (state.settings.autoBuffers && task.scheduledHour !== null && task.kind === 'task') await maybeAddBuffer(task);
+    renderToday();
+    renderFocusPanel();
+  }
+  if (!opts.silent) {
+    const when = hour !== null && hour !== undefined ? ` for ${Parse.formatTime(hour, minute || 0)}` : '';
+    const len = duration ? ` · ${Parse.formatDuration(duration)}` : '';
+    const day = date === todayISO() ? '' : ` on ${formatAppDateLabel(date, { weekday: 'short', month: 'short', day: 'numeric' })}`;
+    toast(`Added${when}${len}${day}${people ? ` with ${people}` : ''}`);
+  }
+  return task;
+}
+
+/**
+ * Insert a task row. If the database predates the 5.0 migration, retry without
+ * the new columns so adding tasks never breaks; the user is told once.
+ */
+let schemaWarned = false;
+async function insertTaskRow(row) {
+  let res = await db().from('tasks').insert(row).select().single();
+  if (res.error && /column|schema cache/i.test(res.error.message || '')) {
+    const legacy = { user_id: row.user_id, text: row.text, category: row.category, completed: false, date: row.date };
+    if (row.scheduled_hour !== undefined) legacy.scheduled_hour = row.scheduled_hour;
+    res = await db().from('tasks').insert(legacy).select().single();
+    if (!res.error && !schemaWarned) { schemaWarned = true; toast('Minute-level times need the 5.0 database update. See Account → Setup.', 'error'); }
+  }
+  return res;
+}
+
+const offsetISO = (days) => { const d = new Date(); d.setDate(d.getDate() + days); return isoOf(d); };
+
+/** Smart buffering: slot a short breather between deep work and social/physical blocks. */
+async function maybeAddBuffer(task) {
+  const blocks = Sched.busyIntervals(state.tasks.filter(t => t.kind !== 'microstep' && !t.completed));
+  const me = blocks.find(b => String(b.id) === String(task.id));
+  if (!me) return;
+  const minutes = Sched.bufferLength(state.history.slice(0, 7));
+  const prev = blocks.filter(b => b.end <= me.start + 1 && String(b.id) !== String(task.id)).sort((a, b) => b.end - a.end)[0];
+  const next = blocks.filter(b => b.start >= me.end - 1 && String(b.id) !== String(task.id)).sort((a, b) => a.start - b.start)[0];
+  const candidates = [prev && Sched.bufferBetween(prev, me, { minutes }), next && Sched.bufferBetween(me, next, { minutes })].filter(Boolean);
+  for (const buf of candidates) {
+    if (buf.end > 1440) continue;
+    const clash = blocks.some(b => b.start < buf.end && b.end > buf.start && b.kind !== 'buffer');
+    if (clash) continue;
+    const row = { user_id: state.currentUser.id, text: buf.text, category: buf.category, completed: false, date: todayISO(), scheduled_hour: Math.floor(buf.start / 60), scheduled_minute: buf.start % 60, duration_min: minutes, kind: 'buffer' };
+    const { data, error } = await db().from('tasks').insert(row).select().single();
+    if (!error && data) { state.tasks.push(normalizeTask(data)); toast(`Added a ${minutes}-minute buffer at ${Sched.label(buf.start)}.`); }
+  }
 }
 
 async function toggleTask(id) {
@@ -705,7 +930,19 @@ async function toggleTask(id) {
     toast("Couldn't update that task.", 'error');
     return;
   }
-  if (newCompleted && state.tasks.every(t => t.completed)) toast('Every task done. That is a full day.');
+  // Micro-steps roll up: finishing the last step completes the parent; reopening a step reopens it.
+  if (task.kind === 'microstep' && task.parentId) {
+    const parent = state.tasks.find(t => String(t.id) === String(task.parentId));
+    const siblings = state.tasks.filter(t => String(t.parentId) === String(task.parentId));
+    if (parent && siblings.length && siblings.every(t => t.completed) !== parent.completed) await toggleTask(parent.id);
+  }
+  if (newCompleted && task.kind === 'task') {
+    const open = state.tasks.filter(t => String(t.parentId) === String(task.id) && !t.completed);
+    for (const step of open) { step.completed = true; await db().from('tasks').update({ completed: true, completed_at: new Date().toISOString() }).eq('id', step.id); }
+    if (open.length) renderToday();
+  }
+  const real = state.tasks.filter(countable);
+  if (newCompleted && real.length && real.every(t => t.completed)) toast('Every task done. That is a full day.');
   await checkStreak();
 }
 
@@ -729,73 +966,161 @@ async function updateTaskText(id, text) {
   if (error) { task.text = old; renderToday(); toast("Couldn't rename that task.", 'error'); }
 }
 
-async function scheduleTask(id, hour) {
+/** Move a task to hour:minute (minute-precise) or unschedule it with hour = null. */
+async function scheduleTask(id, hour, minute = 0) {
   const task = state.tasks.find(t => String(t.id) === String(id));
   if (!task) return;
-  const prev = task.scheduledHour;
+  const prev = { h: task.scheduledHour, m: task.scheduledMinute };
   task.scheduledHour = hour;
+  task.scheduledMinute = hour === null ? null : (minute || 0);
   renderToday();
-  const { error } = await db().from('tasks').update({ scheduled_hour: hour }).eq('id', id);
-  if (error) { console.error('Schedule failed:', error); task.scheduledHour = prev; renderToday(); toast("Couldn't move that task.", 'error'); }
+  let { error } = await db().from('tasks').update({ scheduled_hour: hour, scheduled_minute: hour === null ? null : (minute || 0) }).eq('id', id);
+  if (error && /column|schema cache/i.test(error.message || '')) ({ error } = await db().from('tasks').update({ scheduled_hour: hour }).eq('id', id));
+  if (error) { console.error('Schedule failed:', error); task.scheduledHour = prev.h; task.scheduledMinute = prev.m; renderToday(); toast("Couldn't move that task.", 'error'); return; }
+  if (hour !== null && state.settings.autoBuffers && task.kind === 'task') await maybeAddBuffer(task);
 }
 
 const unscheduleTask = (id) => scheduleTask(id, null);
 
+async function setTaskDuration(id, minutes) {
+  const task = state.tasks.find(t => String(t.id) === String(id));
+  if (!task) return;
+  const prev = task.durationMin;
+  task.durationMin = minutes || null;
+  renderToday();
+  const { error } = await db().from('tasks').update({ duration_min: minutes || null }).eq('id', id);
+  if (error) { task.durationMin = prev; renderToday(); toast("Couldn't change the length.", 'error'); }
+}
+
+/** Micro-step decomposition: AI first, offline templates as fallback. */
+async function breakDownTask(id) {
+  const task = state.tasks.find(t => String(t.id) === String(id));
+  if (!task || !state.currentUser) return;
+  if (state.tasks.some(t => String(t.parentId) === String(id))) { toast('This task already has steps.'); return; }
+  toast('Finding a five-minute way in…');
+  let steps = [];
+  try {
+    const res = await callAI('breakdown', { text: task.text, category: task.category });
+    steps = Array.isArray(res?.steps) ? res.steps : [];
+  } catch (err) { console.warn('Breakdown AI unavailable, using local steps:', err?.message); }
+  if (!steps.length) steps = Momentum.localMicroSteps(task.text, task.category);
+  const rows = steps.slice(0, 6).map(st => ({ user_id: state.currentUser.id, text: cleanInput(st.text, LIMITS.task), category: task.category, completed: false, date: task.date || todayISO(), kind: 'microstep', parent_id: task.id, duration_min: Math.max(1, Math.min(30, st.minutes || 5)) }));
+  const { data, error } = await db().from('tasks').insert(rows).select();
+  if (error) {
+    console.error('Micro-steps failed:', error);
+    toast(/column|schema cache|kind/i.test(error.message || '') ? 'Micro-steps need the 5.0 database update. See Account → Setup.' : "Couldn't save the steps.", 'error');
+    return;
+  }
+  state.tasks.push(...(data || []).map(normalizeTask));
+  renderToday();
+  renderFocusPanel();
+  toast(`${rows.length} tiny steps added. Start with the first one.`);
+}
+
 // --- Streak ---
 function displayStreak() {
-  // A streak is only alive if the last full day was today or yesterday
+  // A streak is only alive if the last counted day was today or yesterday
   if (state.lastCompleteDate === todayISO() || state.lastCompleteDate === yesterdayISO()) return state.streak;
   return 0;
 }
 
-async function checkStreak() {
+/**
+ * Momentum Grace: a day counts when every task is done, or when the person
+ * still showed up (reflection + one task, or at least half the plan).
+ */
+async function checkStreak(reflected = false) {
   const today = todayISO();
-  const allDone = state.tasks.length > 0 && state.tasks.every(t => t.completed);
-  if (!allDone || state.lastCompleteDate === today || !state.currentUser) return;
+  if (state.lastCompleteDate === today || !state.currentUser) return;
+  const real = state.tasks.filter(countable);
+  const verdict = Momentum.graceVerdict({ total: real.length, done: real.filter(t => t.completed).length, reflected: reflected || state.history.some(h => h.date === today) });
+  if (!verdict.counts) return;
   state.streak = state.lastCompleteDate === yesterdayISO() ? state.streak + 1 : 1;
   state.longestStreak = Math.max(state.longestStreak, state.streak);
   state.lastCompleteDate = today;
-  const { error } = await db().from('profiles').update({ streak: state.streak, longest_streak: state.longestStreak, last_complete_date: today }).eq('id', state.currentUser.id);
+  const patch = { streak: state.streak, longest_streak: state.longestStreak, last_complete_date: today };
+  if (verdict.grace) { state.graceDays += 1; state.lastGraceDate = today; Object.assign(patch, { grace_days: state.graceDays, last_grace_date: today }); }
+  let { error } = await db().from('profiles').update(patch).eq('id', state.currentUser.id);
+  if (error && /column|schema cache/i.test(error.message || '')) ({ error } = await db().from('profiles').update({ streak: state.streak, longest_streak: state.longestStreak, last_complete_date: today }).eq('id', state.currentUser.id));
   if (error) console.error('Streak update failed:', error);
+  if (verdict.grace) toast(verdict.reason);
   renderStats();
 }
 
 function renderTasks() {
   if (isEditing()) return;
   els.taskList.innerHTML = '';
-  if (state.tasks.length === 0) { els.emptyState.classList.remove('hidden'); return; }
+  const visible = state.tasks.filter(topLevel);
+  if (visible.length === 0) { els.emptyState.classList.remove('hidden'); return; }
   els.emptyState.classList.add('hidden');
-  const ordered = [...state.tasks].sort((a, b) => Number(a.completed) - Number(b.completed));
-  const hourOptions = ['<option value="">Anytime</option>']
-    .concat(Array.from({ length: 24 }, (_, h) => `<option value="${h}">${formatHourShort(h)}</option>`)).join('');
-
+  const ordered = [...visible].sort((a, b) => Number(a.completed) - Number(b.completed) || (startMinutes(a) ?? 9e9) - (startMinutes(b) ?? 9e9) || a.createdAt - b.createdAt);
+  const frag = document.createDocumentFragment();
   ordered.forEach(task => {
-    const li = document.createElement('li');
-    li.className = 'task-item' + (task.completed ? ' completed' : '');
-    li.style.setProperty('--c', `var(--cat-${task.category})`);
-    li.draggable = true;
-    li.dataset.id = task.id;
-    li.innerHTML = `
-      <span class="cat-bar" title="${CATEGORY_LABELS[task.category]}"></span>
-      <button class="task-checkbox ${task.completed ? 'checked' : ''}" type="button" aria-label="${task.completed ? 'Mark incomplete' : 'Mark complete'}"><svg class="i"><use href="#i-check"/></svg></button>
-      <span class="task-text" title="Double-click to edit">${escapeHtml(task.text)}</span>
-      <select class="task-hour ${task.scheduledHour !== null ? 'set' : ''}" aria-label="Schedule time">${hourOptions}</select>
-      <div class="task-actions">
-        <button class="icon-btn focus-btn" type="button" title="Focus on this" aria-label="Start focus on this task"><svg class="i"><use href="#i-timer"/></svg></button>
-        <button class="icon-btn delete-btn" type="button" title="Delete" aria-label="Delete task"><svg class="i"><use href="#i-x"/></svg></button>
-      </div>`;
-    const sel = li.querySelector('.task-hour');
-    sel.value = task.scheduledHour !== null ? String(task.scheduledHour) : '';
-    sel.addEventListener('change', () => scheduleTask(task.id, sel.value === '' ? null : Number(sel.value)));
-    li.querySelector('.task-checkbox').addEventListener('click', () => toggleTask(task.id));
-    li.querySelector('.delete-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteTask(task.id); });
-    li.querySelector('.focus-btn').addEventListener('click', () => { switchView('focus'); focus.taskId = String(task.id); renderFocusPanel(); });
-    const textEl = li.querySelector('.task-text');
-    textEl.addEventListener('dblclick', () => startEdit(textEl, task));
-    li.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', String(task.id)); li.classList.add('dragging'); });
-    li.addEventListener('dragend', () => li.classList.remove('dragging'));
-    els.taskList.appendChild(li);
+    frag.appendChild(buildTaskItem(task));
+    const steps = state.tasks.filter(t => String(t.parentId) === String(task.id)).sort((a, b) => a.createdAt - b.createdAt);
+    if (steps.length) {
+      const ul = document.createElement('ul');
+      ul.className = 'microsteps';
+      ul.setAttribute('aria-label', `Steps for ${task.text}`);
+      steps.forEach(st => ul.appendChild(buildTaskItem(st)));
+      const li = document.createElement('li');
+      li.className = 'microsteps-wrap';
+      li.appendChild(ul);
+      frag.appendChild(li);
+    }
   });
+  els.taskList.appendChild(frag);
+}
+
+const timeValue = (t) => (t.scheduledHour === null ? '' : `${pad(t.scheduledHour)}:${pad(t.scheduledMinute || 0)}`);
+
+/** @param {Task} task */
+function buildTaskItem(task) {
+  const li = document.createElement('li');
+  const isStep = task.kind === 'microstep', isBuffer = task.kind === 'buffer';
+  li.className = 'task-item' + (task.completed ? ' completed' : '') + (isStep ? ' microstep' : '') + (isBuffer ? ' buffer' : '');
+  li.style.setProperty('--c', `var(--cat-${task.category})`);
+  li.draggable = !isStep;
+  li.dataset.id = String(task.id);
+  const meta = [];
+  if (task.durationMin) meta.push(Parse.formatDuration(task.durationMin));
+  if (task.people) meta.push(`with ${task.people}`);
+  const durOptions = ['', 5, 10, 15, 25, 30, 45, 60, 90, 120, 180].map(v => `<option value="${v}" ${(task.durationMin || '') === v ? 'selected' : ''}>${v === '' ? 'Length' : Parse.formatDuration(v)}</option>`).join('');
+  li.innerHTML = `
+    <span class="cat-bar" title="${CATEGORY_LABELS[task.category]}"></span>
+    <button class="task-checkbox ${task.completed ? 'checked' : ''}" type="button" aria-label="${task.completed ? 'Mark incomplete' : 'Mark complete'}"><svg class="i"><use href="#i-check"/></svg></button>
+    <span class="task-main">
+      <span class="task-text" title="Double-click to edit">${escapeHtml(task.text)}</span>
+      ${meta.length ? `<span class="task-meta">${escapeHtml(meta.join(' · '))}</span>` : ''}
+    </span>
+    ${isStep ? '' : `<label class="task-time ${task.scheduledHour !== null ? 'set' : ''}"><input type="time" step="300" value="${timeValue(task)}" aria-label="Start time"><span class="task-time-label">${task.scheduledHour !== null ? escapeHtml(Parse.formatTime(task.scheduledHour, task.scheduledMinute || 0)) : 'Anytime'}</span></label>`}
+    <div class="task-actions">
+      ${isStep || isBuffer ? '' : `<select class="task-duration" aria-label="Length">${durOptions}</select>`}
+      ${isStep || isBuffer ? '' : `<button class="icon-btn steps-btn" type="button" title="Break into five-minute steps" aria-label="Break into five-minute steps"><svg class="i"><use href="#i-steps"/></svg></button>`}
+      ${isBuffer ? '' : `<button class="icon-btn focus-btn" type="button" title="Focus on this" aria-label="Start focus on this task"><svg class="i"><use href="#i-timer"/></svg></button>`}
+      <button class="icon-btn delete-btn" type="button" title="Delete" aria-label="Delete task"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>`;
+  const time = li.querySelector('.task-time input');
+  if (time) {
+    time.addEventListener('change', () => {
+      const v = /** @type {HTMLInputElement} */ (time).value;
+      if (!v) return scheduleTask(task.id, null);
+      const [h, m] = v.split(':').map(Number);
+      scheduleTask(task.id, h, m);
+    });
+    li.querySelector('.task-time')?.addEventListener('contextmenu', (e) => { e.preventDefault(); if (task.scheduledHour !== null) scheduleTask(task.id, null); });
+  }
+  li.querySelector('.task-duration')?.addEventListener('change', (e) => setTaskDuration(task.id, Number(/** @type {HTMLSelectElement} */ (e.target).value) || null));
+  li.querySelector('.task-checkbox')?.addEventListener('click', () => toggleTask(task.id));
+  li.querySelector('.delete-btn')?.addEventListener('click', (e) => { e.stopPropagation(); deleteTask(task.id); });
+  li.querySelector('.steps-btn')?.addEventListener('click', () => breakDownTask(task.id));
+  li.querySelector('.focus-btn')?.addEventListener('click', () => { switchView('focus'); focus.taskId = String(task.id); if (task.durationMin && !focus.running && focus.remaining === focus.duration) setTimerSeconds(task.durationMin * 60); renderFocusPanel(); });
+  const textEl = li.querySelector('.task-text');
+  textEl?.addEventListener('dblclick', () => startEdit(textEl, task));
+  if (!isStep) {
+    li.addEventListener('dragstart', (e) => { e.dataTransfer?.setData('text/plain', String(task.id)); li.classList.add('dragging'); });
+    li.addEventListener('dragend', () => li.classList.remove('dragging'));
+  }
+  return li;
 }
 
 function startEdit(el, task) {
@@ -818,8 +1143,9 @@ function startEdit(el, task) {
 }
 
 function renderStats() {
-  const total = state.tasks.length;
-  const done = state.tasks.filter(t => t.completed).length;
+  const real = state.tasks.filter(countable);
+  const total = real.length;
+  const done = real.filter(t => t.completed).length;
   const pct = total ? Math.round((done / total) * 100) : 0;
   els.streakCount.textContent = displayStreak();
   els.completedCount.textContent = done;
@@ -828,7 +1154,15 @@ function renderStats() {
   els.progressBar.style.width = pct + '%';
   const C = 2 * Math.PI * 18;
   els.progressRing.style.strokeDashoffset = String(C - (C * pct) / 100);
-  els.focusMinutes.textContent = Math.round(todaysSessions().reduce((s, x) => s + x.minutes, 0) * 100) / 100;
+  els.focusMinutes.textContent = String(Math.round(todaysSessions().reduce((s, x) => s + x.minutes, 0) * 100) / 100);
+  const graceEl = $('streak-grace');
+  if (graceEl) {
+    const verdict = Momentum.graceVerdict({ total, done, reflected: state.history.some(h => h.date === todayISO()) });
+    const protectedToday = state.lastCompleteDate === todayISO();
+    graceEl.textContent = protectedToday ? (state.lastGraceDate === todayISO() ? 'Held by Momentum Grace' : 'Today counted') : (verdict.counts ? 'Streak safe once you check in' : verdict.reason);
+    graceEl.classList.toggle('ok', protectedToday || verdict.counts);
+    graceEl.hidden = !total;
+  }
 }
 
 // --- Timeline ---
@@ -837,24 +1171,27 @@ function renderTimeline() {
   const prevScroll = container.scrollTop;
   container.innerHTML = '';
   const currentHour = new Date().getHours();
+  const frag = document.createDocumentFragment();
   for (let hour = 0; hour < 24; hour += 1) {
     const block = document.createElement('div');
     block.className = 'hour-block' + (hour === currentHour ? ' now' : hour < currentHour ? ' past' : '');
-    block.dataset.hour = hour;
+    block.dataset.hour = String(hour);
     const label = document.createElement('div');
     label.className = 'hour-label';
     label.textContent = formatHourShort(hour);
     const slot = document.createElement('div');
     slot.className = 'hour-slot';
-    slot.dataset.hour = hour;
-    state.tasks.filter(t => t.scheduledHour === hour).forEach(task => {
+    slot.dataset.hour = String(hour);
+    state.tasks.filter(t => t.scheduledHour === hour && topLevel(t)).sort((a, b) => (a.scheduledMinute || 0) - (b.scheduledMinute || 0)).forEach(task => {
       const div = document.createElement('div');
-      div.className = 'scheduled-task' + (task.completed ? ' completed' : '');
+      div.className = 'scheduled-task' + (task.completed ? ' completed' : '') + (task.kind === 'buffer' ? ' buffer' : '');
       div.style.setProperty('--c', `var(--cat-${task.category})`);
       div.draggable = true;
-      div.innerHTML = `<span>${escapeHtml(task.text)}</span><button class="scheduled-remove" type="button" title="Unschedule" aria-label="Unschedule"><svg class="i"><use href="#i-x"/></svg></button>`;
-      div.querySelector('.scheduled-remove').addEventListener('click', () => unscheduleTask(task.id));
-      div.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', String(task.id)));
+      const when = Parse.formatTime(hour, task.scheduledMinute || 0).replace(/ [AP]M$/, '');
+      const len = task.durationMin ? ` · ${Parse.formatDuration(task.durationMin)}` : '';
+      div.innerHTML = `<span class="st-time mono">${when}${len}</span><span class="st-text">${escapeHtml(task.text)}</span><button class="scheduled-remove" type="button" title="Unschedule" aria-label="Unschedule"><svg class="i"><use href="#i-x"/></svg></button>`;
+      div.querySelector('.scheduled-remove')?.addEventListener('click', () => unscheduleTask(task.id));
+      div.addEventListener('dragstart', (e) => e.dataTransfer?.setData('text/plain', String(task.id)));
       slot.appendChild(div);
     });
     slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('drag-over'); });
@@ -862,17 +1199,23 @@ function renderTimeline() {
     slot.addEventListener('drop', (e) => {
       e.preventDefault();
       slot.classList.remove('drag-over');
-      const id = e.dataTransfer.getData('text/plain');
-      if (id) scheduleTask(id, hour);
+      const id = e.dataTransfer?.getData('text/plain');
+      if (!id) return;
+      // Drop position inside the hour picks the minute, snapped to 5.
+      const rect = slot.getBoundingClientRect();
+      const frac = rect.height ? Math.max(0, Math.min(0.999, (e.clientY - rect.top) / rect.height)) : 0;
+      const minute = Math.min(55, Math.round((frac * 60) / 5) * 5);
+      scheduleTask(id, hour, minute);
     });
     block.appendChild(label);
     block.appendChild(slot);
-    container.appendChild(block);
+    frag.appendChild(block);
   }
   const line = document.createElement('div');
   line.className = 'now-line';
   line.id = 'now-line';
-  container.appendChild(line);
+  frag.appendChild(line);
+  container.appendChild(frag);
   container.scrollTop = prevScroll;
   requestAnimationFrame(() => {
     positionNowLine();
@@ -970,31 +1313,69 @@ async function completeFocus() {
   focus.running = false;
   const minutes = Math.round(focus.duration / 60 * 100) / 100;
   const task = state.tasks.find(t => String(t.id) === String(focus.taskId));
-  logSession(minutes, task?.text || 'Free focus', focus.duration);
+  const entry = logSession(minutes, task?.text || 'Free focus', focus.duration, { category: task?.category || null, taskId: task?.id ?? null, completed: true });
   chime();
   focus.remaining = focus.duration;
   renderFocusDial();
+  if (Shield.isZen()) Shield.exitZen();
   toast(`Timer complete: ${formatTimerTime(focus.duration)} of focus.`);
-  if (task && !task.completed && $('focus-complete-toggle')?.checked) await toggleTask(task.id);
+  if (task && !task.completed && /** @type {HTMLInputElement|null} */ ($('focus-complete-toggle'))?.checked) await toggleTask(task.id);
   renderFocusPanel();
   renderStats();
+  openJournal(entry);
 }
 
 function resetFocus() {
   if (focus.running) focus.remaining = Math.max(0, (focus.endAt - Date.now()) / 1000);
   if (focus.running || focus.remaining < focus.duration) {
-    const elapsed = Math.floor((focus.duration - focus.remaining) / 60);
-    if (elapsed >= 1) {
+    const elapsedSec = Math.floor(focus.duration - focus.remaining);
+    if (elapsedSec >= 60) {
       const task = state.tasks.find(t => String(t.id) === String(focus.taskId));
-      logSession(elapsed, task?.text || 'Free focus');
-      toast(`Logged ${elapsed} min.`);
+      logSession(Math.round(elapsedSec / 60 * 100) / 100, task?.text || 'Free focus', elapsedSec, { category: task?.category || null, taskId: task?.id ?? null, completed: false });
+      toast(`Logged ${Math.floor(elapsedSec / 60)} min.`);
     }
   }
   clearInterval(focus.timer);
   focus.running = false;
   focus.remaining = focus.duration;
+  if (Shield.isZen()) Shield.exitZen();
   renderFocusPanel();
   renderStats();
+}
+
+// --- Distraction Shield controls ---
+function setAmbient(name) {
+  const btns = document.querySelectorAll('[data-ambient]');
+  if (!name || name === 'off') { Shield.stop(); } else if (!Shield.start(name)) { toast('Audio is not available in this browser.', 'error'); return; }
+  btns.forEach(b => b.setAttribute('aria-pressed', String((/** @type {HTMLElement} */ (b)).dataset.ambient === (name || 'off'))));
+  saveSetting('ambient', name || 'off');
+}
+
+// --- Session journal (shown after a finished session) ---
+let journalEntry = null;
+function openJournal(entry) {
+  const modal = $('journal-modal');
+  if (!modal || !entry) return;
+  journalEntry = entry;
+  $('journal-label').textContent = `${entry.label} · ${formatTimerTime(entry.seconds)}`;
+  /** @type {HTMLTextAreaElement} */ ($('journal-note')).value = '';
+  modal.classList.add('open');
+  setTimeout(() => $('journal-note')?.focus(), 50);
+}
+function closeJournal() { $('journal-modal')?.classList.remove('open'); journalEntry = null; }
+async function saveJournal(save = true) {
+  const note = save ? cleanInput(/** @type {HTMLTextAreaElement} */ ($('journal-note')).value, LIMITS.note) : '';
+  if (journalEntry && note) {
+    journalEntry.note = note;
+    const all = allSessions();
+    const hit = all.find(x => x.at === journalEntry.at);
+    if (hit) hit.note = note;
+    if (state.demo) demoSessions = all; else store.set(sessionsKey(), all);
+    if (journalEntry.cloudId) await db().from('focus_sessions').update({ note }).eq('id', journalEntry.cloudId);
+    toast('Saved to your session log.');
+  }
+  closeJournal();
+  renderFocusPanel();
 }
 
 function formatTimerTime(seconds) {
@@ -1025,11 +1406,57 @@ let demoSessions = [];
 function sessionsKey() { return `visionary-focus-${state.currentUser?.id || 'anon'}`; }
 function allSessions() { return state.demo ? demoSessions : (store.get(sessionsKey(), []) || []); }
 function todaysSessions() { return allSessions().filter(s => s.date === todayISO()); }
-function logSession(minutes, label, seconds = Math.round(minutes * 60)) {
+
+/**
+ * Log a focus/stopwatch session locally (instant) and to the cloud (best effort).
+ * Local-first: the device log is the source of truth for today; the cloud copy
+ * powers analytics across devices and survives a cleared browser.
+ */
+function logSession(minutes, label, seconds = Math.round(minutes * 60), extra = {}) {
   const all = allSessions();
-  all.push({ date: todayISO(), at: Date.now(), minutes, seconds, label });
+  const entry = { date: todayISO(), at: Date.now(), minutes, seconds, label, mode: extra.mode || 'timer', category: extra.category || null, completed: extra.completed !== false, taskId: extra.taskId ?? null, note: null, cloudId: null };
+  all.push(entry);
   if (state.demo) demoSessions = all.slice(-500);
   else store.set(sessionsKey(), all.slice(-500));
+  if (state.currentUser && seconds >= 1) {
+    db().from('focus_sessions').insert({ user_id: state.currentUser.id, date: entry.date, label: cleanInput(label, 200), category: entry.category, task_id: entry.taskId === null ? null : String(entry.taskId), seconds: Math.min(86400, Math.max(1, Math.round(seconds))), mode: entry.mode, completed: entry.completed, started_at: new Date(Date.now() - seconds * 1000).toISOString() })
+      .select().single()
+      .then(({ data, error }) => {
+        if (error) { console.warn('Session not synced:', error.message); return; }
+        entry.cloudId = data?.id || null;
+        if (!state.demo) store.set(sessionsKey(), allSessions().map(x => (x.at === entry.at ? { ...x, cloudId: entry.cloudId } : x)));
+      });
+  }
+  return entry;
+}
+window.visionaryLogSession = (minutes, label, seconds, extra) => logSession(minutes, label, seconds, extra);
+
+/** Merge cloud sessions (other devices) into the local log, keyed by start time. */
+async function loadCloudSessions() {
+  if (!state.currentUser) return;
+  if (state.demo) { await seedDemoSessions(); return; }
+  const since = new Date(); since.setDate(since.getDate() - 90);
+  const { data, error } = await db().from('focus_sessions').select('*').eq('user_id', state.currentUser.id).gte('date', isoOf(since)).order('started_at', { ascending: true }).limit(1000);
+  if (error) { console.warn('Cloud sessions unavailable:', error.message); return; }
+  const local = allSessions();
+  const known = new Set(local.map(x => x.cloudId).filter(Boolean));
+  let added = 0;
+  for (const row of data || []) {
+    if (known.has(row.id)) continue;
+    const at = new Date(row.started_at).getTime() + row.seconds * 1000;
+    if (local.some(x => Math.abs(x.at - at) < 2000)) continue;
+    local.push({ date: row.date, at, minutes: Math.round(row.seconds / 60 * 100) / 100, seconds: row.seconds, label: row.label, mode: row.mode, category: row.category, completed: row.completed, taskId: row.task_id, note: row.note, cloudId: row.id });
+    added++;
+  }
+  if (added) { local.sort((a, b) => a.at - b.at); store.set(sessionsKey(), local.slice(-1000)); }
+}
+
+/** Demo mode: seed the in-memory session log from the demo database once. */
+async function seedDemoSessions() {
+  if (demoSessions.length) return;
+  const { data } = await db().from('focus_sessions').select('*');
+  const rows = data || [];
+  demoSessions = rows.map(r => ({ date: r.date, at: new Date(r.started_at).getTime() + r.seconds * 1000, minutes: r.seconds / 60, seconds: r.seconds, label: r.label, mode: r.mode, category: r.category, completed: r.completed, taskId: null, note: r.note, cloudId: r.id }));
 }
 
 function renderFocusPanel() {
@@ -1042,9 +1469,13 @@ function renderFocusPanel() {
   }
   const list = $('session-list');
   const sessions = todaysSessions().reverse();
-  list.innerHTML = sessions.map(s => `<li><span class="task-category-dot" style="--c:var(--accent)"></span><span>${escapeHtml(s.label)}</span><span class="mono">${new Date(s.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · ${formatTimerTime(s.seconds ?? Math.round(s.minutes * 60))}</span></li>`).join('');
+  list.innerHTML = sessions.map(s => `<li><span class="task-category-dot" style="--c:var(--cat-${s.category || 'focus'})"></span><span class="session-main"><span>${escapeHtml(s.label)}</span>${s.note ? `<span class="session-note">${escapeHtml(s.note)}</span>` : ''}</span><span class="mono">${new Date(s.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · ${formatTimerTime(s.seconds ?? Math.round(s.minutes * 60))}${s.completed === false ? ' · stopped' : ''}</span></li>`).join('');
   $('session-empty').classList.toggle('hidden', sessions.length > 0);
   $('focus-total').textContent = `${Math.round(sessions.reduce((a, s) => a + s.minutes, 0) * 100) / 100} min`;
+  const week = allSessions().filter(s => (parseAppDate(s.date)?.getTime() ?? 0) >= Date.now() - 7 * 86400000).reduce((a, s) => a + s.minutes, 0);
+  const weekEl = $('focus-week');
+  if (weekEl) weekEl.textContent = `${Math.round(week)} min`;
+  document.querySelectorAll('[data-ambient]').forEach(b => b.setAttribute('aria-pressed', String((/** @type {HTMLElement} */ (b)).dataset.ambient === (Shield.current() || 'off'))));
   renderFocusDial();
 }
 
@@ -1067,8 +1498,8 @@ function chime() {
 // Reflection
 // ============================================
 function openReflection() {
-  const total = state.tasks.length;
-  const done = state.tasks.filter(t => t.completed).length;
+  const total = state.tasks.filter(countable).length;
+  const done = state.tasks.filter(t => countable(t) && t.completed).length;
   els.reflectDone.textContent = done;
   els.reflectTotal.textContent = total;
   els.reflectRate.textContent = total ? Math.round((done / total) * 100) : 0;
@@ -1088,10 +1519,10 @@ function closeReflection() { els.reflectModal.classList.remove('open'); }
 
 async function saveReflection() {
   if (!state.currentUser) return;
-  const total = state.tasks.length;
-  const done = state.tasks.filter(t => t.completed).length;
+  const total = state.tasks.filter(countable).length;
+  const done = state.tasks.filter(t => countable(t) && t.completed).length;
   const categoryBreakdown = { focus: 0, health: 0, learn: 0, build: 0, rest: 0 };
-  state.tasks.forEach(t => { if (t.completed && categoryBreakdown[t.category] !== undefined) categoryBreakdown[t.category] += 1; });
+  state.tasks.filter(countable).forEach(t => { if (t.completed && categoryBreakdown[t.category] !== undefined) categoryBreakdown[t.category] += 1; });
   const reflection = {
     user_id: state.currentUser.id,
     date: todayISO(),
@@ -1103,9 +1534,12 @@ async function saveReflection() {
     note: cleanInput(els.reflectNote.value, LIMITS.note),
     categories: categoryBreakdown
   };
+  const verdict = Momentum.graceVerdict({ total, done, reflected: true });
+  if (verdict.grace) reflection.grace = true;
   els.reflectSave.disabled = true;
   els.reflectSave.textContent = 'Saving…';
-  const { error } = await db().from('reflections').upsert(reflection, { onConflict: 'user_id,date' });
+  let { error } = await db().from('reflections').upsert(reflection, { onConflict: 'user_id,date' });
+  if (error && /column|schema cache/i.test(error.message || '')) { const { grace, ...legacy } = reflection; ({ error } = await db().from('reflections').upsert(legacy, { onConflict: 'user_id,date' })); }
   if (error) {
     console.error('Save reflection failed:', error);
     els.reflectSave.disabled = false;
@@ -1114,8 +1548,9 @@ async function saveReflection() {
     return;
   }
   state.history = state.history.filter(h => h.date !== reflection.date);
-  state.history.unshift({ ...reflection, timestamp: Date.now() });
+  state.history.unshift({ ...reflection, grace: !!reflection.grace, timestamp: Date.now() });
   els.reflectSave.textContent = 'Saved';
+  await checkStreak(true);
   await showReflectionInsight();
   if (state.currentView === 'analytics') renderAnalytics();
   setTimeout(closeReflection, 4500);
@@ -1161,8 +1596,18 @@ function renderAnalytics() {
       renderChartCompletion(chartData);
       renderChartCategory(filtered);
       renderChartEnergy(chartData);
+      renderChartEnergyByCategory(filtered);
+      renderChartHours();
     }).catch(() => { /* charts are optional; the rest of the page still renders */ });
   }
+  const fsEl = $('summary-focus');
+  if (fsEl) {
+    const cutoff = state.analyticsPeriod === 9999 ? 0 : Date.now() - state.analyticsPeriod * 86400000;
+    const mins = allSessions().filter(x => (parseAppDate(x.date)?.getTime() ?? 0) >= cutoff).reduce((a, x) => a + x.minutes, 0);
+    fsEl.textContent = mins >= 120 ? `${Math.round(mins / 60 * 10) / 10} h` : `${Math.round(mins)} min`;
+  }
+  const graceEl = $('summary-grace');
+  if (graceEl) graceEl.textContent = String(state.graceDays || filtered.filter(h => h.grace).length);
 }
 
 function renderHeatmap() {
@@ -1346,6 +1791,83 @@ function renderChartEnergy(history) {
   });
 }
 
+/** Energy vs. task type: average reported energy on days where each category led the wins. */
+function renderChartEnergyByCategory(history) {
+  const canvas = $('chart-energy-cat');
+  if (!canvas || !window.Chart) return;
+  const colors = getChartColors();
+  chartEnergyCat?.destroy();
+  const sums = Object.fromEntries(CATEGORIES.map(c => [c, { e: 0, n: 0 }]));
+  history.forEach(h => {
+    if (!h.energy) return;
+    CATEGORIES.forEach(c => { const k = h.categories?.[c] || 0; if (k > 0) { sums[c].e += h.energy * k; sums[c].n += k; } });
+  });
+  const data = CATEGORIES.map(c => (sums[c].n ? Math.round((sums[c].e / sums[c].n) * 10) / 10 : 0));
+  const base = chartBaseOptions(colors);
+  chartEnergyCat = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels: CATEGORIES.map(c => CATEGORY_LABELS[c]), datasets: [{ label: 'Avg energy when completing', data, backgroundColor: CATEGORIES.map(c => colors[c] + 'cc'), borderRadius: 8, maxBarThickness: 36 }] },
+    options: { ...base, plugins: { ...base.plugins, legend: { display: false } }, scales: { ...base.scales, y: { ...base.scales.y, min: 0, max: 10 } } }
+  });
+}
+
+/** Time of day vs. completion: how often blocks scheduled at each hour actually got done (last 26 weeks). */
+function renderChartHours() {
+  const canvas = $('chart-hours');
+  if (!canvas || !window.Chart) return;
+  const colors = getChartColors();
+  chartHours?.destroy();
+  const past = state.pastTasks.filter(t => t.scheduledHour !== null && countable(t));
+  const agg = Array.from({ length: 24 }, () => ({ n: 0, done: 0 }));
+  past.forEach(t => { agg[t.scheduledHour].n++; if (t.completed) agg[t.scheduledHour].done++; });
+  const hours = Array.from({ length: 24 }, (_, h) => h).filter(h => h >= 5 && h <= 23);
+  const rate = hours.map(h => (agg[h].n ? Math.round((agg[h].done / agg[h].n) * 100) : null));
+  const planned = hours.map(h => agg[h].n);
+  const base = chartBaseOptions(colors);
+  chartHours = new Chart(canvas.getContext('2d'), {
+    data: {
+      labels: hours.map(h => formatHourShort(h).replace(' ', '')),
+      datasets: [
+        { type: 'bar', label: 'Blocks planned', data: planned, backgroundColor: colors.grid, borderRadius: 6, yAxisID: 'y1', maxBarThickness: 22 },
+        { type: 'line', label: 'Completion %', data: rate, borderColor: colors.accent, backgroundColor: colors.accent, spanGaps: true, tension: 0.35, pointRadius: 3, borderWidth: 2, yAxisID: 'y' }
+      ]
+    },
+    options: { ...base, interaction: { mode: 'index', intersect: false }, scales: { x: base.scales.x, y: { ...base.scales.y, min: 0, max: 100, position: 'left', ticks: { ...base.scales.y.ticks, callback: (v) => v + '%' } }, y1: { ...base.scales.y, position: 'right', grid: { display: false } } } }
+  });
+  const note = $('chart-hours-note');
+  if (note) note.textContent = past.length ? `${past.length} scheduled blocks over the last 26 weeks.` : 'Schedule tasks at specific times and this fills in over the coming weeks.';
+}
+
+// ============================================
+// Nudges — quiet, data-backed, at most one per hour
+// ============================================
+let lastNudgeAt = 0;
+function maybeNudge(force = false) {
+  if (!state.currentUser || !state.settings.nudges) return;
+  if (!force && Date.now() - lastNudgeAt < 60 * 60 * 1000) return;
+  if (document.querySelector('.ai-suggestion-popup')) return;
+  const nudges = Momentum.computeNudges({ sessions: allSessions(), history: state.history, tasks: state.tasks });
+  const dismissed = store.get('visionary-nudges-dismissed', {}) || {};
+  const pick = nudges.find(n => !dismissed[n.id] || Date.now() - dismissed[n.id] > 3 * 86400000);
+  if (!pick) return;
+  lastNudgeAt = Date.now();
+  els.aiSlot.innerHTML = '';
+  const popup = document.createElement('div');
+  popup.className = 'ai-suggestion-popup nudge';
+  popup.setAttribute('role', 'status');
+  popup.innerHTML = `<svg class="i"><use href="#i-sparkle"/></svg><div><span class="nudge-kicker">Pattern</span>${escapeHtml(pick.text)}${pick.action ? ` <button class="link-inline nudge-action" type="button">${escapeHtml(pick.actionLabel || 'Do it')}</button>` : ''}</div><button class="icon-btn ai-suggestion-close" type="button" aria-label="Dismiss"><svg class="i"><use href="#i-x"/></svg></button>`;
+  popup.querySelector('.ai-suggestion-close')?.addEventListener('click', () => { dismissed[pick.id] = Date.now(); store.set('visionary-nudges-dismissed', dismissed); popup.remove(); });
+  popup.querySelector('.nudge-action')?.addEventListener('click', () => {
+    popup.remove();
+    const [kind, arg] = String(pick.action).split(':');
+    if (kind === 'timer') { switchView('focus'); $('mode-timer')?.click(); setTimerSeconds(Number(arg) * 60); }
+    else if (kind === 'suggest') handleAISuggest();
+    else if (kind === 'reflect') openReflection();
+    else if (kind === 'breakdown') { const t = state.tasks.find(x => !x.completed && x.kind === 'task' && x.scheduledHour !== null && x.scheduledHour < new Date().getHours()); if (t) breakDownTask(t.id); }
+  });
+  els.aiSlot.appendChild(popup);
+}
+
 // ============================================
 // History
 // ============================================
@@ -1424,25 +1946,30 @@ async function callAI(mode, payload = {}) {
     throw err;
   }
   if (data?.error) throw new Error(data.error);
-  if (mode === 'schedule-import') return data;
+  if (mode === 'schedule-import' || mode === 'schedule-text' || mode === 'breakdown') return data;
   return data?.suggestion || data?.message || null;
 }
 
 // Offline brain used in demo mode and as a fallback when the edge function is unreachable
-async function localAI(mode) {
-  await new Promise(r => setTimeout(r, 900));
+async function localAI(mode, payload = {}) {
+  await new Promise(r => setTimeout(r, mode === 'schedule-text' ? 200 : 900));
   if (mode === 'next-action') return localSuggestion();
   if (mode === 'insight') return localInsight();
+  if (mode === 'breakdown') return { steps: Momentum.localMicroSteps(payload.text || '', payload.category || 'focus') };
+  if (mode === 'schedule-text') {
+    const tasks = Parse.parseScheduleText(payload.text || '');
+    return { tasks, message: tasks.length ? `Found ${tasks.length} item${tasks.length > 1 ? 's' : ''} in your text.` : 'No items found. Try one item per line, like “9:00-10:15 CS 1570 lecture”.' };
+  }
   if (mode === 'schedule-import') {
     return {
       message: 'Demo scan: here is what a class schedule might turn into.',
       tasks: [
-        { text: 'CS 1570 lecture', category: 'learn', scheduledHour: 9 },
-        { text: 'Calculus II recitation', category: 'learn', scheduledHour: 11 },
-        { text: 'Lunch + walk', category: 'health', scheduledHour: 12 },
-        { text: 'Digital logic lab', category: 'build', scheduledHour: 14 },
-        { text: 'Office hours', category: 'focus', scheduledHour: 16 },
-        { text: 'Gym — pull day', category: 'health', scheduledHour: 18 }
+        { text: 'CS 1570 lecture', category: 'learn', scheduledHour: 9, scheduledMinute: 0, durationMin: 75 },
+        { text: 'Calculus II recitation', category: 'learn', scheduledHour: 11, scheduledMinute: 0, durationMin: 50 },
+        { text: 'Lunch + walk', category: 'health', scheduledHour: 12, scheduledMinute: 15, durationMin: 45 },
+        { text: 'Digital logic lab', category: 'build', scheduledHour: 14, scheduledMinute: 0, durationMin: 110 },
+        { text: 'Office hours', category: 'focus', scheduledHour: 16, scheduledMinute: 0, durationMin: 60 },
+        { text: 'Gym — pull day', category: 'health', scheduledHour: 18, scheduledMinute: 0, durationMin: 60 }
       ]
     };
   }
@@ -1451,13 +1978,13 @@ async function localAI(mode) {
 
 function localSuggestion() {
   const h = new Date().getHours();
-  const open = state.tasks.filter(t => !t.completed);
+  const open = state.tasks.filter(t => !t.completed && countable(t));
   if (!state.tasks.length) return 'Start small: add one task you can finish in the next 30 minutes, then build from there.';
   if (!open.length) return 'Everything is done. Close the loop with a quick reflection, then actually rest.';
-  const due = open.filter(t => t.scheduledHour !== null && t.scheduledHour <= h).sort((a, b) => a.scheduledHour - b.scheduledHour)[0];
-  if (due) return `“${due.text}” was planned for ${formatHour(due.scheduledHour)}. Give it 25 focused minutes now and it's behind you.`;
-  const next = open.filter(t => t.scheduledHour !== null).sort((a, b) => a.scheduledHour - b.scheduledHour)[0];
-  if (next && next.scheduledHour - h <= 1) return `“${next.text}” is coming up at ${formatHour(next.scheduledHour)}. Use the gap to clear something quick.`;
+  const due = open.filter(t => t.scheduledHour !== null && t.scheduledHour <= h).sort((a, b) => (startMinutes(a) || 0) - (startMinutes(b) || 0))[0];
+  if (due) return `“${due.text}” was planned for ${Parse.formatTime(due.scheduledHour, due.scheduledMinute || 0)}. Give it ${due.durationMin && due.durationMin <= 60 ? due.durationMin : 25} focused minutes now and it's behind you.`;
+  const next = open.filter(t => t.scheduledHour !== null).sort((a, b) => (startMinutes(a) || 0) - (startMinutes(b) || 0))[0];
+  if (next && next.scheduledHour - h <= 1) return `“${next.text}” is coming up at ${Parse.formatTime(next.scheduledHour, next.scheduledMinute || 0)}. Use the gap to clear something quick.`;
   const pick = open.find(t => t.category === (h < 12 ? 'focus' : h < 17 ? 'build' : 'rest')) || open[0];
   return `Your best next move: “${pick.text}”. It fits this part of the day — start a focus session and let the timer carry you.`;
 }
@@ -1521,6 +2048,11 @@ async function imageToBase64(file, maxSide = 1600) {
 async function handleScheduleImageUpload(event) {
   const file = event?.target?.files?.[0];
   if (event?.target) event.target.value = '';
+  return importScheduleImage(file);
+}
+
+/** Shared by the file picker, clipboard paste and drag-and-drop. */
+async function importScheduleImage(file) {
   if (!file || !state.currentUser) return;
   const cfg = window.VISIONARY_CONFIG || {};
   const allowed = cfg.allowedUploadTypes || ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -1528,15 +2060,16 @@ async function handleScheduleImageUpload(event) {
   if (file.size > (cfg.maxUploadMB || 15) * 1024 * 1024) { toast(`That image is over ${cfg.maxUploadMB || 15} MB. Try a screenshot instead.`, 'error'); return; }
 
   importItems = [];
-  $('import-message').textContent = `Scanning ${file.name}…`;
+  $('import-message').textContent = `Scanning ${file.name || 'image'}…`;
   $('import-list').innerHTML = '<li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li>';
-  $('import-confirm').disabled = true;
+  /** @type {HTMLButtonElement} */ ($('import-confirm')).disabled = true;
   $('import-count').textContent = 'Reading the image';
+  showImportSource('image');
   $('import-modal').classList.add('open');
 
   try {
     const { base64, mimeType, previewUrl } = await imageToBase64(file);
-    $('import-img').src = previewUrl;
+    /** @type {HTMLImageElement} */ ($('import-img')).src = previewUrl;
     const result = await callAI('schedule-import', {
       image: base64,
       mimeType,
@@ -1556,23 +2089,75 @@ async function handleScheduleImageUpload(event) {
   }
 }
 
+/** Switch the import modal between the image preview and the paste-text box. */
+function showImportSource(kind) {
+  $('import-preview-image')?.toggleAttribute('hidden', kind !== 'image');
+  $('import-preview-text')?.toggleAttribute('hidden', kind !== 'text');
+}
+
+/** "Paste text" entry point: opens the modal with an empty textarea. */
+function openTextImport() {
+  if (!state.currentUser) return;
+  importItems = [];
+  showImportSource('text');
+  $('import-message').textContent = 'Paste a syllabus, class schedule, meeting list or any notes with times. One item per line works best.';
+  $('import-list').innerHTML = '';
+  $('import-count').textContent = '';
+  /** @type {HTMLButtonElement} */ ($('import-confirm')).disabled = true;
+  /** @type {HTMLTextAreaElement} */ ($('import-text')).value = '';
+  $('import-modal').classList.add('open');
+  setTimeout(() => $('import-text')?.focus(), 50);
+}
+
+async function parsePastedText() {
+  const raw = /** @type {HTMLTextAreaElement} */ ($('import-text')).value.trim();
+  if (!raw) { toast('Paste some text first.', 'error'); return; }
+  const btn = /** @type {HTMLButtonElement} */ ($('import-parse'));
+  btn.disabled = true; btn.textContent = 'Reading…';
+  $('import-list').innerHTML = '<li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li>';
+  try {
+    let result;
+    try {
+      result = await callAI('schedule-text', { text: raw.slice(0, 6000), date: todayISO(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' });
+    } catch (err) {
+      console.warn('Text import AI unavailable, using local parser:', err?.message);
+      result = await localAI('schedule-text', { text: raw });
+    }
+    if (!result?.tasks?.length) result = await localAI('schedule-text', { text: raw });
+    importItems = (result?.tasks || []).map(t => ({ ...t, include: true }));
+    $('import-message').textContent = importItems.length ? (result?.message || `Found ${importItems.length} items. Edit anything before importing.`) : (result?.message || 'No schedule items found in that text.');
+    renderImportList();
+  } finally {
+    btn.disabled = false; btn.textContent = 'Read text';
+  }
+}
+
 function renderImportList() {
   const list = $('import-list');
-  const hourOpts = (sel) => ['<option value="">Anytime</option>'].concat(Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${sel === h ? 'selected' : ''}>${formatHourShort(h)}</option>`)).join('');
   const catOpts = (sel) => CATEGORIES.map(c => `<option value="${c}" ${sel === c ? 'selected' : ''}>${CATEGORY_LABELS[c]}</option>`).join('');
+  const durOpts = (sel) => ['', 15, 25, 30, 45, 50, 60, 75, 90, 110, 120, 180].map(v => `<option value="${v}" ${(sel || '') === v ? 'selected' : ''}>${v === '' ? 'Length' : Parse.formatDuration(v)}</option>`).join('');
+  const timeVal = (it) => (Number.isInteger(it.scheduledHour) ? `${pad(it.scheduledHour)}:${pad(it.scheduledMinute || 0)}` : '');
   list.innerHTML = importItems.map((it, i) => `
     <li class="import-row ${it.include ? '' : 'off'}" data-i="${i}">
       <input type="checkbox" ${it.include ? 'checked' : ''} aria-label="Include">
       <input type="text" value="${escapeHtml(it.text)}" aria-label="Task text">
-      <select class="imp-cat" aria-label="Category">${catOpts(it.category)}</select>
-      <select class="imp-hour" aria-label="Time">${hourOpts(Number.isInteger(it.scheduledHour) ? it.scheduledHour : null)}</select>
+      <div class="imp-controls">
+        <select class="imp-cat" aria-label="Category">${catOpts(it.category)}</select>
+        <input type="time" class="imp-time" step="300" value="${timeVal(it)}" aria-label="Start time">
+        <select class="imp-dur" aria-label="Length">${durOpts(it.durationMin)}</select>
+      </div>
     </li>`).join('');
   list.querySelectorAll('.import-row').forEach(row => {
-    const it = importItems[Number(row.dataset.i)];
-    row.querySelector('input[type="checkbox"]').addEventListener('change', (e) => { it.include = e.target.checked; row.classList.toggle('off', !it.include); updateImportCount(); });
-    row.querySelector('input[type="text"]').addEventListener('input', (e) => { it.text = e.target.value; });
-    row.querySelector('.imp-cat').addEventListener('change', (e) => { it.category = e.target.value; });
-    row.querySelector('.imp-hour').addEventListener('change', (e) => { it.scheduledHour = e.target.value === '' ? null : Number(e.target.value); });
+    const it = importItems[Number(/** @type {HTMLElement} */ (row).dataset.i)];
+    row.querySelector('input[type="checkbox"]')?.addEventListener('change', (e) => { it.include = /** @type {HTMLInputElement} */ (e.target).checked; row.classList.toggle('off', !it.include); updateImportCount(); });
+    row.querySelector('input[type="text"]')?.addEventListener('input', (e) => { it.text = /** @type {HTMLInputElement} */ (e.target).value; });
+    row.querySelector('.imp-cat')?.addEventListener('change', (e) => { it.category = /** @type {HTMLSelectElement} */ (e.target).value; });
+    row.querySelector('.imp-time')?.addEventListener('change', (e) => {
+      const v = /** @type {HTMLInputElement} */ (e.target).value;
+      if (!v) { it.scheduledHour = null; it.scheduledMinute = null; return; }
+      const [h, m] = v.split(':').map(Number); it.scheduledHour = h; it.scheduledMinute = m;
+    });
+    row.querySelector('.imp-dur')?.addEventListener('change', (e) => { it.durationMin = Number(/** @type {HTMLSelectElement} */ (e.target).value) || null; });
   });
   updateImportCount();
 }
@@ -1595,10 +2180,29 @@ async function confirmImport() {
     category: CATEGORIES.includes(item.category) ? item.category : 'focus',
     completed: false,
     date: todayISO(),
-    scheduled_hour: Number.isInteger(item.scheduledHour) ? item.scheduledHour : null
+    scheduled_hour: Number.isInteger(item.scheduledHour) ? item.scheduledHour : null,
+    scheduled_minute: Number.isInteger(item.scheduledHour) ? (Number.isInteger(item.scheduledMinute) ? item.scheduledMinute : 0) : null,
+    duration_min: Number.isInteger(item.durationMin) && item.durationMin > 0 ? item.durationMin : null,
+    people: item.people ? cleanInput(String(item.people), 120) : null
   }));
-  const { data, error } = await db().from('tasks').insert(rows).select();
+  // Conflict resolution: items that overlap an existing block get nudged to the next free 15-minute boundary.
+  const busy = Sched.busyIntervals(state.tasks.filter(topLevel));
+  let moved = 0;
+  rows.forEach(r => {
+    if (r.scheduled_hour === null) return;
+    const len = r.duration_min || 60;
+    let start = r.scheduled_hour * 60 + r.scheduled_minute;
+    let tries = 0;
+    while (busy.some(b => start < b.end && start + len > b.start) && tries < 12) { start = Math.ceil((start + 1) / 15) * 15; tries++; }
+    if (start + len <= 1440 && start !== r.scheduled_hour * 60 + r.scheduled_minute && tries < 12) { r.scheduled_hour = Math.floor(start / 60); r.scheduled_minute = start % 60; moved++; }
+    busy.push({ start, end: start + len });
+  });
+  let { data, error } = await db().from('tasks').insert(rows).select();
+  if (error && /column|schema cache/i.test(error.message || '')) {
+    ({ data, error } = await db().from('tasks').insert(rows.map(({ scheduled_minute, duration_min, people, ...r }) => r)).select());
+  }
   if (error) { console.error(error); toast("Couldn't import those tasks.", 'error'); updateImportCount(); return; }
+  if (moved) toast(`${moved} item${moved > 1 ? 's' : ''} moved slightly to avoid overlaps.`);
   state.tasks.push(...(data || []).map(normalizeTask));
   closeImport();
   renderToday();
@@ -1608,9 +2212,34 @@ async function confirmImport() {
 
 function closeImport() {
   $('import-modal').classList.remove('open');
-  const src = $('import-img').src;
+  const img = /** @type {HTMLImageElement} */ ($('import-img'));
+  const src = img.src;
   if (src.startsWith('blob:')) URL.revokeObjectURL(src);
-  $('import-img').removeAttribute('src');
+  img.removeAttribute('src');
+}
+
+/** Clipboard and drag-and-drop: a pasted screenshot or dropped image starts a scan. */
+function bindImportShortcuts() {
+  document.addEventListener('paste', (e) => {
+    if (!state.currentUser || document.activeElement?.matches('input, textarea, [contenteditable="true"]')) return;
+    const file = Array.from(e.clipboardData?.files || []).find(f => f.type.startsWith('image/'));
+    if (file) { e.preventDefault(); importScheduleImage(file); return; }
+    const text = e.clipboardData?.getData('text/plain') || '';
+    if (text.split('\n').filter(l => l.trim()).length >= 2 && Parse.TIME_RE.test(text)) {
+      e.preventDefault();
+      openTextImport();
+      /** @type {HTMLTextAreaElement} */ ($('import-text')).value = text.slice(0, 6000);
+      parsePastedText();
+    }
+  });
+  const shell = $('app-shell');
+  ['dragenter', 'dragover'].forEach(ev => shell?.addEventListener(ev, (e) => { if (Array.from(e.dataTransfer?.types || []).includes('Files')) { e.preventDefault(); shell.classList.add('drop-ready'); } }));
+  shell?.addEventListener('dragleave', (e) => { if (e.target === shell) shell.classList.remove('drop-ready'); });
+  shell?.addEventListener('drop', (e) => {
+    shell.classList.remove('drop-ready');
+    const file = Array.from(e.dataTransfer?.files || []).find(f => f.type.startsWith('image/'));
+    if (file) { e.preventDefault(); importScheduleImage(file); }
+  });
 }
 
 // ============================================
@@ -1628,9 +2257,13 @@ function paletteCommands() {
     { group: 'Actions', icon: 'i-play', label: focus.running ? 'Pause timer' : 'Start or resume timer', run: () => { switchView('focus'); $('mode-timer').click(); toggleFocus(); } },
     { group: 'Actions', icon: 'i-sparkle', label: 'Suggest my next action', run: () => { switchView('today'); handleAISuggest(); } },
     { group: 'Actions', icon: 'i-scan', label: 'Scan a schedule image', run: () => $('schedule-image-input').click() },
+    { group: 'Actions', icon: 'i-paste', label: 'Paste a schedule as text', run: openTextImport },
+    { group: 'Actions', icon: 'i-steps', label: 'Break a task into five-minute steps', run: () => { const t = state.tasks.find(x => !x.completed && x.kind === 'task'); if (t) breakDownTask(t.id); else toast('Add a task first.'); } },
+    { group: 'Actions', icon: 'i-link', label: 'Booking link & requests', run: () => window.visionaryOpenBooking?.() },
+    { group: 'Actions', icon: 'i-shield', label: Shield.isZen() ? 'Leave full-screen focus' : 'Enter full-screen focus', run: () => { switchView('focus'); Shield.isZen() ? Shield.exitZen() : Shield.enterZen(); } },
     { group: 'Actions', icon: 'i-feather', label: 'End-of-day reflection', run: openReflection },
     { group: 'Actions', icon: state.theme === 'dark' ? 'i-sun' : 'i-moon', label: `Switch to ${state.theme === 'dark' ? 'light' : 'dark'} mode`, run: () => applyTheme(state.theme === 'dark' ? 'light' : 'dark') },
-    { group: 'Actions', icon: 'i-gift', label: "What's new in 4.0", run: openWhatsNew },
+    { group: 'Actions', icon: 'i-gift', label: `What's new in ${APP_VERSION}`, run: openWhatsNew },
     { group: 'Account', icon: 'i-logout', label: state.demo ? 'Leave demo' : 'Log out', run: () => logout() }
   ];
 }
@@ -1650,8 +2283,18 @@ function renderPalette() {
   const cmds = paletteCommands().filter(c => !ql || c.label.toLowerCase().includes(ql) || c.group.toLowerCase().includes(ql));
   paletteItems = [];
   if (q) {
-    const { text, hour } = parseTaskInput(q);
-    paletteItems.push({ group: 'Create', icon: 'i-plus', label: `Add task “${text}”${hour !== null ? ` at ${formatHour(hour)}` : ''}`, run: () => { switchView('today'); createTask(q, state.selectedCategory); } });
+    const p = parseTaskInput(q);
+    if (p.intent === 'find') {
+      paletteItems.push(...slotSuggestions(p, q));
+    } else if (p.text) {
+      const bits = [];
+      if (p.hour !== null) bits.push(`at ${Parse.formatTime(p.hour, p.minute || 0)}`);
+      if (p.duration) bits.push(`for ${Parse.formatDuration(p.duration)}`);
+      if (p.people) bits.push(`with ${p.people}`);
+      if (p.dateOffset) bits.push(p.dateOffset === 1 ? 'tomorrow' : formatAppDateLabel(offsetISO(p.dateOffset), { weekday: 'short', month: 'short', day: 'numeric' }));
+      const cat = p.category && p.category !== state.selectedCategory ? ` · ${CATEGORY_LABELS[p.category]}` : '';
+      paletteItems.push({ group: 'Create', icon: 'i-plus', label: `Add “${p.text}”${bits.length ? ' ' + bits.join(' ') : ''}${cat}`, run: () => { switchView('today'); createTask(q, p.category || state.selectedCategory); } });
+    }
   }
   paletteItems.push(...cmds);
   if (paletteIndex >= paletteItems.length) paletteIndex = 0;
@@ -1665,6 +2308,42 @@ function renderPalette() {
     li.addEventListener('mousemove', () => { if (paletteIndex !== Number(li.dataset.i)) { paletteIndex = Number(li.dataset.i); highlightPalette(); } });
     li.addEventListener('click', () => runPalette(Number(li.dataset.i)));
   });
+}
+
+/**
+ * Booking agent: "find 30 minutes next Tuesday after my discrete math class".
+ * Looks at the target day's blocks (today from state, other days from the DB
+ * cache) and offers up to three free slots ranked by the user's strong hours.
+ */
+let slotCache = { date: null, tasks: [] };
+function slotSuggestions(p, raw) {
+  const date = offsetISO(p.dateOffset || 0);
+  const duration = p.duration || 30;
+  const dayTasks = date === todayISO() ? state.tasks : (slotCache.date === date ? slotCache.tasks : null);
+  if (dayTasks === null) {
+    // Fetch once, then re-render the palette with real availability.
+    slotCache = { date, tasks: [] };
+    db().from('tasks').select('*').eq('user_id', state.currentUser?.id).eq('date', date).then(({ data }) => { slotCache = { date, tasks: (data || []).map(normalizeTask) }; if ($('cmdk').classList.contains('open')) renderPalette(); });
+    return [{ group: 'Find time', icon: 'i-clock', label: `Checking ${formatAppDateLabel(date, { weekday: 'long', month: 'short', day: 'numeric' })}…`, run: () => {} }];
+  }
+  const blocks = Sched.busyIntervals(dayTasks.filter(topLevel));
+  let notBefore = 0, to = 22 * 60;
+  const anchorFor = (phrase) => dayTasks.find(t => t.scheduledHour !== null && t.text.toLowerCase().includes(phrase.toLowerCase().replace(/\b(class|lecture|meeting|session)\b/g, '').trim()));
+  if (p.after) { const a = anchorFor(p.after); if (a) notBefore = (startMinutes(a) || 0) + (a.durationMin || 60); }
+  if (p.before) { const b = anchorFor(p.before); if (b) to = startMinutes(b) || to; }
+  if (date === todayISO()) { const now = new Date(); notBefore = Math.max(notBefore, now.getHours() * 60 + now.getMinutes() + 10); }
+  const buffer = Sched.bufferLength(state.history.slice(0, 7));
+  const slots = Sched.freeSlots(blocks, { duration, from: 7 * 60, to, buffer, notBefore });
+  const ranked = Sched.shortlist(Sched.rankSlots(slots, Sched.hourScores(state.pastTasks), p.part), 3);
+  const dayLabel = date === todayISO() ? 'today' : formatAppDateLabel(date, { weekday: 'short', month: 'short', day: 'numeric' });
+  if (!ranked.length) return [{ group: 'Find time', icon: 'i-clock', label: `No free ${Parse.formatDuration(duration)} ${dayLabel}${p.after ? ` after ${p.after}` : ''}. Try another day.`, run: () => {} }];
+  const title = p.text && p.text !== 'Open block' ? p.text : 'Open block';
+  return ranked.map(sl => ({
+    group: 'Find time',
+    icon: 'i-clock',
+    label: `${Sched.label(sl.start)} ${dayLabel} · ${Parse.formatDuration(duration)}${p.after ? ` (after ${p.after})` : ''} — book “${title}”`,
+    run: () => createTask(title, p.category || state.selectedCategory, { date, hour: Math.floor(sl.start / 60), minute: sl.start % 60, duration, people: p.people })
+  }));
 }
 
 function highlightPalette() {
@@ -1704,6 +2383,7 @@ function closeWhatsNew() {
 // Utilities
 // ============================================
 window.visionaryToast = (...args) => toast(...args);
+window.visionaryReloadTasks = async () => { if (!state.currentUser) return; await loadTasks(); renderToday(); };
 function toast(message, type = 'info') {
   const wrap = $('toasts');
   if (!wrap) return;

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Book time — Visionary</title>
+  <meta name="description" content="Pick a time that works. Visionary shows only free slots, never private tasks.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="canonical" href="https://visionary-llm24-bots-projects.vercel.app/book">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0c0d10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f0e8" media="(prefers-color-scheme: light)">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Visionary">
+  <meta property="og:title" content="Book time — Visionary">
+  <meta property="og:description" content="Pick a time that works. Visionary shows only free slots, never private tasks.">
+  <meta property="og:url" content="https://visionary-llm24-bots-projects.vercel.app/book">
+  <meta property="og:image" content="https://visionary-llm24-bots-projects.vercel.app/assets/og-image.jpg">
+  <meta property="og:image:alt" content="Visionary logo and the words Show up, on purpose, above a glowing horizon arc">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <script src="/js/theme-init.js"></script>
+  <link rel="preload" href="/assets/fonts/satoshi-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/instrument-serif-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/fonts.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="doc-body" data-page="book">
+  <div class="grain" aria-hidden="true"></div>
+  <div class="horizon-glow" aria-hidden="true"></div>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="doc-top">
+    <a class="brand" href="/" aria-label="Visionary home"><svg class="brand-mark" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 32a16 16 0 0 1 32 0"/><path d="M4 32h40"/><circle cx="24" cy="32" r="5" fill="currentColor" stroke="none"/></svg><span>Visionary</span></a>
+    <nav aria-label="Site">
+      <a href="/privacy" class="hide-sm">Privacy</a>
+      <a href="/terms" class="hide-sm">Terms</a>
+      <a class="btn btn-primary btn-sm" href="/">Open Visionary</a>
+    </nav>
+  </header>
+  <main class="book" id="main">
+    <div id="bk-loading" class="book-state"><p class="eyebrow">Booking</p><h1 class="book-title">Checking availability…</h1><p class="subtitle">One moment.</p></div>
+    <div id="bk-error" class="book-state" hidden><p class="eyebrow">Booking</p><h1 class="book-title" id="bk-error-title">Not available</h1><p class="subtitle" id="bk-error-text"></p></div>
+    <div id="bk-done" class="book-state" hidden><p class="eyebrow">Request sent</p><h1 class="book-title">You're on the list.</h1><p class="subtitle" id="bk-done-text"></p><a class="btn btn-ghost btn-sm" href="/">What is Visionary?</a></div>
+    <div id="bk-app" hidden>
+      <header class="book-head"><p class="eyebrow">Booking</p><h1 class="book-title" id="bk-title">Book time</h1><p class="subtitle" id="bk-meta"></p></header>
+      <section class="book-days" id="bk-days" aria-label="Days with open slots"></section>
+      <section class="book-slots-wrap">
+        <h2 class="book-slots-head" id="bk-slots-head"></h2>
+        <div class="book-slots" id="bk-slots" role="group" aria-label="Open times"></div>
+      </section>
+      <form class="book-form card" id="bk-form" hidden novalidate>
+        <p class="subtitle">Requesting <strong id="bk-chosen"></strong></p>
+        <label class="field"><span class="field-label">Your name</span><input type="text" id="bk-name" maxlength="80" autocomplete="name" required></label>
+        <label class="field"><span class="field-label">Email</span><input type="email" id="bk-email" maxlength="254" autocomplete="email" required></label>
+        <label class="field"><span class="field-label">What's it about? <span class="subtitle">(optional)</span></span><textarea id="bk-note" rows="2" maxlength="500"></textarea></label>
+        <p class="form-msg" id="bk-msg" role="status" aria-live="polite"></p>
+        <button class="btn btn-primary" id="bk-submit" type="submit">Request this time</button>
+        <p class="subtitle book-fine">Your name and email go only to the person you're booking with. See the <a href="/privacy">Privacy Policy</a>.</p>
+      </form>
+    </div>
+  </main>
+  <script src="/js/env.js"></script>
+  <script src="/js/book.js"></script>
+  <footer class="doc-foot">
+    <span>© 2026 Visionary. Made in Rolla, Missouri.</span>
+    <nav aria-label="Legal"><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><button type="button" class="link-inline" data-cookie-settings>Cookie settings</button><a href="mailto:louisl4764@gmail.com">Contact</a></nav>
+  </footer>
+  <div class="consent" id="consent-banner" role="region" aria-label="Cookie preferences" hidden>
+    <div class="consent-text">
+      <strong>Your privacy, your call.</strong>
+      <p>We use essential browser storage to keep you signed in and remember your settings. With your permission we'd also like to measure anonymous, cookie-free page performance and usage so we can improve Visionary. <a href="/privacy#cookies">How we use cookies</a></p>
+    </div>
+    <div class="consent-actions">
+      <button class="btn btn-ghost btn-sm" type="button" id="consent-decline">Essential only</button>
+      <button class="btn btn-primary btn-sm" type="button" id="consent-accept">Allow analytics</button>
+    </div>
+  </div>
+  <script src="/js/consent.js"></script>
+  <script src="/js/site-content.js"></script>
+</body>
+</html>

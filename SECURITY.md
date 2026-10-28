@@ -26,12 +26,15 @@ insert into public.site_admins (user_id)
 select id from auth.users where lower(email) = 'someone@example.com';
 ```
 
+### 1c. Visionary OS (5.0)
+Run `supabase/migrations/20261027000000_visionary_os.sql`. Additive only: new task columns, `focus_sessions`, `booking_pages`, `booking_requests`, and two security-definer RPCs for the public booking page. `anon` can call `public_availability` (returns free/busy minutes only — never titles, notes or people) and `request_booking` (sanitised, clash-checked, rate-limited to 20 requests per page per hour and 3 per email per day); it has no table privileges.
+
 ### 2. Edge functions
 ```bash
 supabase secrets set ANTHROPIC_API_KEY=sk-ant-...            # never in the front end
 supabase secrets set ALLOWED_ORIGINS=https://your-domain.com,https://visionary-llm24-bots-projects.vercel.app
 supabase secrets set LOG_SALT=$(openssl rand -hex 16)        # salts IP hashes in security logs
-# optional overrides: AI_DAILY_LIMIT_SUGGEST=30 AI_DAILY_LIMIT_INSIGHT=10 AI_DAILY_LIMIT_IMPORT=10 AI_PER_MINUTE_LIMIT=6
+# optional overrides: AI_DAILY_LIMIT_SUGGEST=30 AI_DAILY_LIMIT_INSIGHT=10 AI_DAILY_LIMIT_IMPORT=10 AI_DAILY_LIMIT_BREAKDOWN=20 AI_PER_MINUTE_LIMIT=6
 supabase functions deploy ai-suggest
 supabase functions deploy account
 ```
@@ -67,7 +70,8 @@ supabase functions deploy account
 | **Security headers** | Strict CSP (`script-src 'self'` + Turnstile only, `frame-ancestors 'none'`, `object-src 'none'`), `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, COOP. All scripts, fonts and libraries are self-hosted. |
 | **CSRF** | Supabase auth uses bearer tokens in the `Authorization` header, not cookies, so browsers never attach credentials automatically and classic CSRF doesn't apply. Edge functions additionally reject any request whose `Origin` is not in `ALLOWED_ORIGINS`. |
 | **CORS** | Edge functions reflect only allow-listed origins, allow only `POST`/`OPTIONS`, and log blocked origins. |
-| **Row Level Security** | Every table is `auth.uid() = user_id`. `anon` has no table privileges. `ai_usage` and `security_events` have RLS with no policies (service role only). |
+| **Row Level Security** | Every table is `auth.uid() = user_id`. `anon` has no table privileges. `ai_usage` and `security_events` have RLS with no policies (service role only). `booking_requests` can only be created through the `request_booking` RPC. |
+| **Booking pages** | `/book?u=slug` is public but sees only `{date, start, end}` busy intervals via `public_availability`; the owner's task titles, notes and people never leave the database. Slugs are validated (`^[a-z0-9][a-z0-9-]{2,39}$`), pages can be switched off, and requests are rate-limited server side. |
 | **Sanitize before storing** | Client: `cleanInput()` strips control/bidi characters, collapses whitespace and enforces length. Server: `BEFORE INSERT/UPDATE` triggers do the same, clamp numbers and whitelist categories. Output is always HTML-escaped. |
 | **Form validation** | Accessible inline errors (`aria-invalid`, live regions), email format, password policy, confirm-password on reset, `maxlength` on every input. |
 | **Spam protection** | Honeypot field, minimum fill time, optional Cloudflare Turnstile (enforced server-side by Supabase), Supabase IP rate limits. |

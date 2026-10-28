@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Engineering notes — Visionary Studio</title>
+  <meta name="description" content="Everything built, changed and decided in Visionary, for site admins.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="canonical" href="https://visionary-llm24-bots-projects.vercel.app/studio-notes">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0c0d10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f0e8" media="(prefers-color-scheme: light)">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Visionary">
+  <meta property="og:title" content="Engineering notes — Visionary Studio">
+  <meta property="og:description" content="Everything built, changed and decided in Visionary, for site admins.">
+  <meta property="og:url" content="https://visionary-llm24-bots-projects.vercel.app/studio-notes">
+  <meta property="og:image" content="https://visionary-llm24-bots-projects.vercel.app/assets/og-image.jpg">
+  <meta property="og:image:alt" content="Visionary logo and the words Show up, on purpose, above a glowing horizon arc">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <script src="/js/theme-init.js"></script>
+  <link rel="preload" href="/assets/fonts/satoshi-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/instrument-serif-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/css/fonts.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="doc-body" data-page="notes">
+  <div class="grain" aria-hidden="true"></div>
+  <div class="horizon-glow" aria-hidden="true"></div>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="doc-top">
+    <a class="brand" href="/" aria-label="Visionary home"><svg class="brand-mark" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M8 32a16 16 0 0 1 32 0"/><path d="M4 32h40"/><circle cx="24" cy="32" r="5" fill="currentColor" stroke="none"/></svg><span>Visionary</span></a>
+    <nav aria-label="Site">
+      <a href="/privacy" class="hide-sm">Privacy</a>
+      <a href="/terms" class="hide-sm">Terms</a>
+      <a class="btn btn-primary btn-sm" href="/">Open Visionary</a>
+    </nav>
+  </header>
+  <main class="doc notes" id="main">
+    <header class="doc-head">
+      <p class="eyebrow">Studio</p>
+      <h1>Engineering notes</h1>
+      <div class="doc-meta">Last release 2026-10-27 · generated from <code>docs/ENGINEERING_NOTES.md</code> · <a href="/studio">Back to Studio</a></div>
+      <p class="lede">Everything that has been built, changed, decided and left to do — releases, schema, AI modes, operations and lessons.</p>
+    </header>
+    <nav class="doc-toc" aria-label="On this page">
+      <p>On this page</p>
+      <a href="#1-what-visionary-is">1. What Visionary is</a>
+      <a href="#2-stack-and-why-it-stayed-this-way">2. Stack and why it stayed this way</a>
+      <a href="#3-repository-map">3. Repository map</a>
+      <a href="#4-release-history">4. Release history</a>
+      <a href="#5-database-schema-current">5. Database schema (current)</a>
+      <a href="#6-edge-function-modes-ai-suggest">6. Edge function modes (`ai-suggest`)</a>
+      <a href="#7-studio-admin-how-it-works">7. Studio (admin) — how it works</a>
+      <a href="#8-operations">8. Operations</a>
+      <a href="#9-decisions-and-lessons">9. Decisions and lessons</a>
+      <a href="#10-known-gaps-and-ideas">10. Known gaps and ideas</a>
+    </nav>
+    <article class="doc-content notes-content">
+<p>Everything that has been built, changed, decided and left to do, in one place. This file is the source of truth; <code>/studio-notes</code> is generated from it by <code>tools/build_notes.py</code> so the same notes are readable inside the Studio admin area.</p>
+<p>Conventions: dates are release dates; commit hashes refer to <code>main</code> on <code>github.com/llm24-bot/Visionary</code>. "Manual step" means something that has to be done in a dashboard or terminal, not by pushing code.</p>
+<hr>
+<section id="1-what-visionary-is" aria-labelledby="1-what-visionary-is-h"><h2 id="1-what-visionary-is-h">1. What Visionary is</h2>
+<p>A routine and focus app that merges three ideas:</p>
+<ul><li><strong>The living day horizon</strong> — the day as an arc the sun travels along, with blocks placed to the minute, natural-language quick actions, and schedule import from text or screenshots.</li><li><strong>Autonomous scheduling</strong> — a booking agent that finds free time in plain English, smart buffers between deep work and meetings, and private booking links that expose only free/busy.</li><li><strong>Momentum engineering</strong> — five-minute micro-steps for intimidating tasks, Momentum Grace so a chaotic day doesn't break a streak, and quiet, data-backed nudges.</li></ul>
+<p>Plus deep-work focus sessions (timer, stopwatch, ambient audio, full-screen mode, session journal), a 30-second end-of-day reflection, and pattern analytics (26-week heatmap, category mix, energy by task type, follow-through by hour).</p>
+</section>
+<section id="2-stack-and-why-it-stayed-this-way" aria-labelledby="2-stack-and-why-it-stayed-this-way-h"><h2 id="2-stack-and-why-it-stayed-this-way-h">2. Stack and why it stayed this way</h2>
+<div class="table-wrap"><table><thead><tr><th>Layer</th><th>Choice</th><th>Reason</th></tr></thead><tbody><tr><td>Front end</td><td>Static HTML, CSS and vanilla JavaScript with <code>// @ts-check</code> + JSDoc types</td><td>The deployed app, auth flow, Studio editor, consent system and CSP were all built on this. A rewrite to React/Next.js would have thrown away working, audited code and re-opened every security review for no user-visible gain. Type safety comes from <code>@ts-check</code> and <code>jsconfig.json</code> (editors run the TypeScript checker on plain JS).</td></tr><tr><td>Styling</td><td>One hand-written design system in <code>css/style.css</code> (+ <code>css/clock.css</code>) with CSS custom properties</td><td>Dark-mode-first, Satoshi (UI) and Instrument Serif (display) self-hosted in <code>assets/fonts</code>. No Tailwind: a utility framework would need a build step and the design tokens already exist.</td></tr><tr><td>Charts / timeline</td><td>Hand-rolled SVG for the horizon and timeline; Chart.js (self-hosted, lazy-loaded) for analytics</td><td>SVG gives full control of the arc and drag-and-drop; Chart.js loads only when Patterns opens.</td></tr><tr><td>Backend</td><td>Supabase — Postgres with Row Level Security, Auth, Edge Functions (Deno)</td><td>One hosted Postgres, auth and serverless in one place. Every table is <code>auth.uid() = user_id</code>.</td></tr><tr><td>AI</td><td>Anthropic Claude via the <code>ai-suggest</code> edge function</td><td>The API key never reaches the browser. Every AI mode has a local fallback so the app works offline or over quota.</td></tr><tr><td>Hosting</td><td>Vercel (static)</td><td><code>vercel.json</code> sets strict security headers, caching, clean URLs and redirects.</td></tr><tr><td>Offline / local-first</td><td>Demo mode runs entirely in memory; focus sessions and settings are mirrored to <code>localStorage</code> and synced to the cloud when available</td><td>Legacy-schema fallbacks keep older databases working: if an insert fails with a "column … does not exist" error, the client retries without the new columns and tells the user to run the latest migration.</td></tr></tbody></table></div>
+</section>
+<section id="3-repository-map" aria-labelledby="3-repository-map-h"><h2 id="3-repository-map-h">3. Repository map</h2>
+<pre><code>index.html              App shell: sign-in, Today, Focus, History, Patterns, all modals
+book.html               Public booking page (/book?u=slug) — built by tools/build_book.py
+studio.html             Studio admin dashboard — built by tools/build_studio.py
+studio-notes.html       This document, rendered — built by tools/build_notes.py
+privacy.html, terms.html, 404.html   Built by tools/build_privacy.py / build_terms.py / build_404.py
+css/style.css           Design system, app layout, all components
+css/clock.css           Timer picker + stopwatch
+js/theme-init.js        Applies theme before first paint
+js/env.js               Public settings (Supabase URL, publishable key, owner email)
+js/config.js            Creates the Supabase client
+js/auth.js              Sign-in, sign-up, reset, lockout, Turnstile hook
+js/parse.js             VisionaryParse — natural-language command + schedule-text parser
+js/scheduler.js         VisionaryScheduler — busy intervals, free slots, ranking, buffers
+js/momentum.js          VisionaryMomentum — grace rules, nudges, local micro-steps
+js/shield.js            VisionaryShield — Web Audio ambient generator + full-screen focus
+js/app.js               Planner: state, data layer, demo DB, horizon, timeline, focus, analytics, palette, import, AI
+js/stopwatch.js         Independent timestamp-based stopwatch (logs sessions ≥ 1 min)
+js/booking.js           Owner side of booking links (create/edit, requests, accept/decline)
+js/book.js              Visitor side of booking links (availability, request form)
+js/account.js           Account modal: password, sessions, export, delete, Studio access
+js/consent.js           Cookie banner + consent-gated analytics
+js/site-content.js      Loads published page edits + in-page visual editor (?edit)
+js/studio.js            Studio dashboard
+vendor/                 Pinned supabase-js 2.117.2 and Chart.js 4.4.0
+supabase/functions/_shared/security.ts   Origin allowlist, size limits, auth, logging
+supabase/functions/ai-suggest/           next-action, insight, schedule-import, schedule-text, breakdown
+supabase/functions/account/              Account deletion
+supabase/migrations/    20260928000000_security_hardening.sql
+                        20260928010000_site_editor.sql
+                        20261027000000_visionary_os.sql
+tools/                  Page builders, local dev server (python3 tools/serve.py → :8000)
+docs/                   ENGINEERING_NOTES.md (this file), payments.md</code></pre>
+</section>
+<section id="4-release-history" aria-labelledby="4-release-history-h"><h2 id="4-release-history-h">4. Release history</h2>
+<h3 id="5-0-visionary-os-2026-10-27">5.0 — "Visionary OS" · 2026-10-27</h3>
+<p>The big one. Goal: merge the three product ideas above without breaking anything that already worked.</p>
+<p><strong>Time engine</strong></p>
+<ul><li>Tasks now carry <code>scheduled_minute</code>, <code>duration_min</code>, <code>kind</code> (<code>task</code> | <code>microstep</code> | <code>buffer</code> | <code>booking</code>), <code>people</code>, <code>note</code> and <code>parent_id</code>. Everything is additive; old rows read as "top of the hour, 60 minutes, kind task".</li><li>The horizon draws duration arcs (<code>.task-span</code>) along the day, not just dots. Buffers are dashed.</li><li>The timeline is minute-precise: dropping a task snaps to 5 minutes; each task has a time input (5-minute step) and a length picker.</li><li><code>Ctrl/Cmd+K</code> understands "gym with Aryan at 6pm for 45 mins", "deep work on C++ compiler from 9am to 11am", "tomorrow", weekday names, "after lunch", categories by keyword.</li><li>Schedule import: paste text (syllabus, class list, meeting notes) → AI <code>schedule-text</code> mode → local parser fallback. Drop a screenshot anywhere on the app or paste one from the clipboard. Import rows now have minute and length. Overlapping imports are nudged to the next free 15-minute boundary.</li></ul>
+<p><strong>Autonomous scheduling</strong></p>
+<ul><li>"find 30 minutes next Tuesday after discrete math" in the palette: the scheduler loads that day's blocks, removes the hours before the named anchor, ranks free slots by the user's historical follow-through per hour (<code>VisionaryScheduler.hourScores</code>) and preferred part of day, and offers up to three. Picking one creates the block.</li><li>Smart buffers: when a deep-work block (focus/learn/build) sits next to a social/health/meeting block, a <code>buffer</code> row is inserted between them. Buffer length comes from the last seven days of energy (<code>bufferLength</code>): low energy → longer buffers. Toggle in Account → Assistant.</li><li>Booking links: <code>booking_pages</code> (one per user; slug, title, length, buffer, hours, days, horizon, time zone, on/off) and <code>booking_requests</code>. Two security-definer RPCs for visitors: <code>public_availability(slug, from, to)</code> returns settings and busy intervals only — never titles, notes or people — and <code>request_booking(...)</code> which is rate-limited (20 per page per hour, 3 per email per day), checks the horizon window and clashes, and sanitises inputs. Owners accept (creates a <code>booking</code> block on their horizon) or decline from Account → Booking link. Public page: <code>/book?u=slug</code>, noindex, works with no account.</li></ul>
+<p><strong>Momentum</strong></p>
+<ul><li>Micro-steps: the steps button on any task asks the AI (<code>breakdown</code> mode) for 3–7 five-minute steps, falling back to templates in <code>VisionaryMomentum.localMicroSteps</code>. Steps are real tasks with <code>kind = 'microstep'</code> and <code>parent_id</code>; completing them all completes the parent, un-completing one re-opens it.</li><li>Momentum Grace: <code>checkStreak(reflected)</code> — a day counts if every top-level task is done, or if the user reflected / finished at least one task (a "grace day", stored as <code>profiles.grace_days</code>, <code>last_grace_date</code>, <code>reflections.grace</code>). The streak stat shows "Saved by grace" when that happened today.</li><li>Nudges: <code>computeNudges</code> looks at focus sessions (where sessions on a category stop early), reflections (energy dips by weekday), and overdue blocks, and shows at most one quiet card per hour in the Today view with a one-click action (shorter timer, suggest, break down, reflect). Dismissals are remembered for three days. Toggle in Account → Assistant.</li></ul>
+<p><strong>Deep work</strong></p>
+<ul><li>Focus sessions (timer and stopwatch) are written to <code>focus_sessions</code> and mirrored locally; the Focus view shows today and the last seven days.</li><li>Finishing a timer checks the linked task off (existing) and now opens a session journal (one optional note, stored on the session).</li><li>Distraction shield: ambient rain / brown noise / wind synthesised with the Web Audio API (no audio files, nothing downloaded), and a full-screen focus mode that hides everything except the dial (<code>body.zen</code>, Escape exits).</li><li>The stopwatch logs a session when reset after a run of a minute or more.</li></ul>
+<p><strong>Intelligence</strong></p>
+<ul><li>Patterns adds "Energy by task type", "Follow-through by hour" (from the last 26 weeks of scheduled tasks), focused time and grace-day summaries, next to the existing heatmap, completion, category mix and energy/focus charts.</li><li>Reflection sets the grace flag and the AI insight prompt now sees focus minutes.</li></ul>
+<p><strong>Engineering</strong></p>
+<ul><li><code>// @ts-check</code> + JSDoc on the new modules and <code>app.js</code>; <code>jsconfig.json</code> with <code>checkJs</code> so editors type-check plain JS.</li><li>The demo DB gained <code>neq/gte/lte/in/is/limit/maybeSingle</code>, cascade delete of micro-steps, and sample <code>focus_sessions</code>, <code>booking_pages</code>, <code>booking_requests</code>.</li><li>Page builders moved into the repo (<code>tools/</code>).</li></ul>
+<p><strong>Manual steps for 5.0</strong></p>
+<ol><li>Supabase → SQL Editor → paste <code>supabase/migrations/20261027000000_visionary_os.sql</code> → Run (idempotent; tested against a clean copy of the earlier schema).</li><li><code>supabase functions deploy ai-suggest</code> (new modes <code>schedule-text</code>, <code>breakdown</code>; optional secret <code>AI_DAILY_LIMIT_BREAKDOWN</code>, default 20).</li><li>Nothing to change in Vercel.</li></ol>
+<h3 id="timer-and-stopwatch-2026-09-29-f75e3ed">Timer and stopwatch · 2026-09-29 · <code>f75e3ed</code></h3>
+<ul><li>Phone-style picker: hours, minutes and seconds (00:00:01–99:59:59), remembered per browser.</li><li>Independent stopwatch with pause/resume, reset and up to 100 laps, timestamp-based so it never drifts.</li><li>Switching modes leaves clocks running; signing out stops both.</li></ul>
+<h3 id="focus-length-full-width-horizon-sidebar-fixes-2026-09-29-f8a7bc4">Focus length, full-width horizon, sidebar fixes · 2026-09-29 · <code>f8a7bc4</code></h3>
+<ul><li>Custom focus length (any minute, not presets); the dial and task completion follow it.</li><li>Day horizon spans the full card width; alignment bug reported with a screenshot fixed.</li><li>Studio link visible in the sidebar for admins and in Account; <code>refreshStudioAccess</code> runs after sign-in.</li><li>Fixed a duplicate <code>focus-minutes</code> id that broke the stat display.</li></ul>
+<h3 id="studio-visual-site-editor-2026-09-29-017cec9">Studio — visual site editor · 2026-09-29 · <code>017cec9</code></h3>
+<ul><li><code>/studio</code> dashboard plus <code>?edit</code> on any page: click text to edit, drag blocks to reorder, add/duplicate/delete, Publish (Ctrl/Cmd+S), History with restore, Restore original.</li><li>Database: <code>site_admins</code>, <code>site_content</code>, <code>site_content_history</code>, <code>is_site_admin()</code> RPC, strict HTML allowlist check in Postgres, every change versioned and logged to <code>security_events</code>. Admins can't be added from the browser.</li><li>Migration <code>20260928010000_site_editor.sql</code> makes <code>louisl4764@gmail.com</code> the first admin.</li><li>Lesson: Studio appeared "missing" until that migration was run; the Account modal now explains this.</li></ul>
+<h3 id="demo-resets-every-time-2026-09-29-3463267">Demo resets every time · 2026-09-29 · <code>3463267</code></h3>
+<ul><li>Demo mode moved to an in-memory database seeded deterministically (<code>seedDemoData</code>) so every visit starts from the same sample data. Nothing from the demo is persisted.</li></ul>
+<h3 id="4-1-trust-and-polish-2026-09-28-0973ddb">4.1 — Trust and polish · 2026-09-28 · <code>0973ddb</code></h3>
+<p>A 40-item legal, security, SEO and accessibility pass:</p>
+<ul><li>Privacy Policy, Terms of Service, cookie consent banner (consent-gated analytics), custom 404, <code>security.txt</code>.</li><li>Account center: change password (signs out other devices), sign out everywhere, download your data (JSON), delete account (edge function).</li><li>Auth: password reset with expiring links, uniform messages that don't reveal whether an email exists, client lockout after 5 failures, honeypot, optional Turnstile.</li><li>Server: RLS on every table, <code>anon</code> has no table privileges, origin allowlist and body size caps in edge functions, per-user AI quotas (<code>consume_ai_quota</code>), magic-byte image checks, prompt-injection defences, <code>security_events</code> log with salted IP hashes.</li><li>Headers: strict CSP (<code>script-src 'self'</code>), HSTS preload, frame blocking, Referrer-Policy, Permissions-Policy. All fonts and libraries self-hosted; Chart.js lazy-loaded.</li><li>SEO: titles, descriptions, OG image, favicons, manifest, sitemap, robots.</li><li>WCAG AA contrast in both themes, focus styles, tablet layouts.</li><li>Migration <code>20260928000000_security_hardening.sql</code>.</li></ul>
+<h3 id="4-0-horizon-2026-09-24-6ef75a3">4.0 — Horizon · 2026-09-24 · <code>6ef75a3</code></h3>
+<ul><li>Full redesign: dark-first design system, Satoshi + Instrument Serif, grain and glow backdrop.</li><li>Day horizon arc with a sun that tracks the time; timeline with drag-and-drop.</li><li>Focus sessions tied to tasks; schedule scan (image → AI → review list → import); 26-week patterns heatmap; command palette; demo mode; What's new modal.</li></ul>
+<h3 id="before-4-0-april-may-2026">Before 4.0 (April–May 2026)</h3>
+<ul><li>v0 → v3: timeline, categories, drag-and-drop, AI panel, end-of-day reflection, analytics, light/dark theme.</li><li>Supabase auth and cloud sync for tasks, reflections and profile; History view with copy-to-today; AI suggest + reflection insight; mobile layout; schedule-import connector; several fixes for blank-shell and date bugs.</li></ul>
+</section>
+<section id="5-database-schema-current" aria-labelledby="5-database-schema-current-h"><h2 id="5-database-schema-current-h">5. Database schema (current)</h2>
+<p>Only ever add tables or columns. Never drop, rename or change types — older app versions and the legacy fallbacks depend on it.</p>
+<pre><code>profiles           id (auth.users), streak, longest_streak, last_complete_date,
+                   grace_days, last_grace_date, settings jsonb
+tasks              id, user_id, text, category, completed, completed_at, date, scheduled_hour, created_at,
+                   scheduled_minute (0–59), duration_min (1–1440), kind, people, note, parent_id → tasks.id (cascade)
+reflections        user_id, date, total, completed, rate, energy, focus, note, categories, grace   (unique user_id+date)
+focus_sessions     id, user_id, date, label, category, task_id, seconds, mode, completed, note, started_at
+booking_pages      id, user_id, slug (unique), title, duration_min, buffer_min, start_hour, end_hour, days[], horizon_days, timezone, active
+booking_requests   id, page_id, user_id (owner), requester_name, requester_email, starts_at, duration_min, note, status, requester_ip
+ai_usage, security_events                       service role only
+site_admins, site_content, site_content_history Studio</code></pre>
+<p>RPCs: <code>is_site_admin()</code>, <code>consume_ai_quota(...)</code>, <code>public_availability(text, date, date)</code>, <code>request_booking(text, timestamptz, text, text, text)</code>.</p>
+<p>Triggers: <code>vn_sanitize_task</code>, <code>vn_sanitize_reflection</code>, <code>vn_sanitize_focus_session</code>, <code>vn_sanitize_booking_page</code>, site-content checks.</p>
+</section>
+<section id="6-edge-function-modes-ai-suggest" aria-labelledby="6-edge-function-modes-ai-suggest-h"><h2 id="6-edge-function-modes-ai-suggest-h">6. Edge function modes (<code>ai-suggest</code>)</h2>
+<div class="table-wrap"><table><thead><tr><th>Mode</th><th>Input</th><th>Output</th><th>Daily limit (default)</th></tr></thead><tbody><tr><td><code>next-action</code></td><td>today's tasks, time</td><td>one sentence</td><td>30</td></tr><tr><td><code>insight</code></td><td>reflection + stats</td><td>one paragraph</td><td>10</td></tr><tr><td><code>schedule-import</code></td><td>image (≤ 5 MB)</td><td><code>{ tasks: [{ text, category, scheduledHour, scheduledMinute, durationMin }], message }</code></td><td>10</td></tr><tr><td><code>schedule-text</code></td><td>text (≤ 6000 chars), date, timezone</td><td>same shape as above</td><td>10</td></tr><tr><td><code>breakdown</code></td><td>task text, category</td><td><code>{ steps: [{ text, minutes }] }</code> (3–7 steps, ≤ 10 min each)</td><td>20</td></tr></tbody></table></div>
+<p>Every mode has a local fallback in <code>app.js</code> (<code>localAI</code>) so a failed call still produces a useful result.</p>
+</section>
+<section id="7-studio-admin-how-it-works" aria-labelledby="7-studio-admin-how-it-works-h"><h2 id="7-studio-admin-how-it-works-h">7. Studio (admin) — how it works</h2>
+<ul><li>Access: <code>/studio</code> or Account → Open Studio, visible only when <code>is_site_admin()</code> is true for the signed-in user.</li><li>Edit any page with <code>?edit</code>. Content regions are marked <code>data-edit-region</code>; published HTML is stored in <code>site_content</code>, sanitised on save and on display, and every version is kept in <code>site_content_history</code>.</li><li>These notes: <code>/studio-notes</code> (linked from Studio and from Account). Regenerate after editing this file: <code>python3 tools/build_notes.py</code>.</li><li>Local try-out without an account: <code>http://localhost:8000/privacy?edit&amp;local=1</code>.</li></ul>
+</section>
+<section id="8-operations" aria-labelledby="8-operations-h"><h2 id="8-operations-h">8. Operations</h2>
+<p><strong>Local development</strong></p>
+<pre><code>python3 tools/serve.py        # http://localhost:8000 (SPA-friendly, clean URLs)
+node --check js/*.js          # syntax check
+deno check supabase/functions/ai-suggest/index.ts</code></pre>
+<p><strong>Deploy</strong>: push to <code>main</code> → Vercel builds the static site. Database and edge-function changes are manual (see release notes above and <code>SECURITY.md</code>).</p>
+<p><strong>Secrets</strong> (Supabase only, never in the repo): <code>ANTHROPIC_API_KEY</code>, <code>ALLOWED_ORIGINS</code>, <code>LOG_SALT</code>, optional <code>AI_DAILY_LIMIT_*</code>, <code>AI_PER_MINUTE_LIMIT</code>.</p>
+<p><strong>Testing migrations</strong>: migrations are written to be idempotent and were replayed against a clean copy of the earlier schema in an embedded Postgres before shipping.</p>
+</section>
+<section id="9-decisions-and-lessons" aria-labelledby="9-decisions-and-lessons-h"><h2 id="9-decisions-and-lessons-h">9. Decisions and lessons</h2>
+<ul><li><strong>No framework rewrite.</strong> See section 2. Modularity comes from one global per module (<code>VisionaryParse</code>, <code>VisionaryScheduler</code>, <code>VisionaryMomentum</code>, <code>VisionaryShield</code>) and <code>@ts-check</code>.</li><li><strong>Additive schema only.</strong> Legacy fallbacks in the client match <code>/column|schema cache/i</code> and retry without new columns, then toast "run the 5.0 update".</li><li><strong>Privacy on booking pages.</strong> Availability leaves the database only as <code>{date, start, end}</code> minutes; titles, notes and people never cross the RPC boundary. Requests can only be created through <code>request_booking</code> (no direct insert grant for <code>anon</code>).</li><li><strong>Time zones.</strong> Booking slots are computed in the owner's stored time zone and displayed in the visitor's; the client has a DST-safe <code>instantIn</code> helper.</li><li><strong>Nudges stay quiet.</strong> One per hour at most, only from the user's own data, dismissable for three days, and the whole feature can be turned off.</li><li><strong>Demo isolation.</strong> The demo is in-memory and reseeded on every start; nothing in the demo touches localStorage except theme and consent.</li><li><strong>Consent banner in QA.</strong> Automated checks must dismiss <code>#consent-decline</code> first or clicks land on the banner.</li><li><strong>Date words in commands.</strong> "Plan tomorrow's lecture" is a task, not a date; the parser only treats date words as dates when they lead the sentence or sit next to a time.</li></ul>
+</section>
+<section id="10-known-gaps-and-ideas" aria-labelledby="10-known-gaps-and-ideas-h"><h2 id="10-known-gaps-and-ideas-h">10. Known gaps and ideas</h2>
+<ul><li>Booking confirmations are not emailed yet (would need an email provider secret + edge function). Requesters see "you'll hear back".</li><li>Nudges are computed client-side only; a scheduled server job could deliver them as push notifications.</li><li>Micro-step durations are suggestions; a "start the next step" timer shortcut would close the loop further.</li><li>Playwright smoke tests exist as a manual script in the QA notes, not in CI.</li></ul>
+</section>
+    </article>
+  </main>
+  <footer class="doc-foot">
+    <span>© 2026 Visionary. Made in Rolla, Missouri.</span>
+    <nav aria-label="Legal"><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><button type="button" class="link-inline" data-cookie-settings>Cookie settings</button><a href="mailto:louisl4764@gmail.com">Contact</a></nav>
+  </footer>
+  <div class="consent" id="consent-banner" role="region" aria-label="Cookie preferences" hidden>
+    <div class="consent-text">
+      <strong>Your privacy, your call.</strong>
+      <p>We use essential browser storage to keep you signed in and remember your settings. With your permission we'd also like to measure anonymous, cookie-free page performance and usage so we can improve Visionary. <a href="/privacy#cookies">How we use cookies</a></p>
+    </div>
+    <div class="consent-actions">
+      <button class="btn btn-ghost btn-sm" type="button" id="consent-decline">Essential only</button>
+      <button class="btn btn-primary btn-sm" type="button" id="consent-accept">Allow analytics</button>
+    </div>
+  </div>
+  <script src="/js/consent.js"></script>
+  <script src="/js/env.js"></script>
+  <script src="/js/site-content.js"></script>
+</body>
+</html>

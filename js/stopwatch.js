@@ -27,6 +27,12 @@
   }
   function reset() {
     clearInterval(interval);
+    // A stopwatch run of a minute or more counts toward focus analytics.
+    const ms = elapsed();
+    if (ms >= 60000 && typeof window.visionaryLogSession === 'function') {
+      const seconds = Math.round(ms / 1000);
+      window.visionaryLogSession(Math.round(seconds / 60 * 100) / 100, lapNumber ? `Stopwatch · ${lapNumber} lap${lapNumber > 1 ? 's' : ''}` : 'Stopwatch', seconds, { mode: 'stopwatch', completed: true });
+    }
     running = false; accumulated = 0; lapAt = 0; lapNumber = 0;
     $('stopwatch-laps').replaceChildren();
     render(); controls();
@@ -63,6 +69,6 @@
   $('mode-timer').addEventListener('click', () => switchMode('timer'));
   $('mode-stopwatch').addEventListener('click', () => switchMode('stopwatch'));
   document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
-  window.visionaryResetStopwatch = () => { reset(); switchMode('timer'); };
+  window.visionaryResetStopwatch = () => { accumulated = 0; running = false; reset(); switchMode('timer'); };
   reset();
 })();

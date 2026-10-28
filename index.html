@@ -75,6 +75,12 @@
       <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
       <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
       <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+      <symbol id="i-steps" viewBox="0 0 24 24"><path d="M4 18h5v-4h5v-4h6"/><path d="M17 7l3 3-3 3"/></symbol>
+      <symbol id="i-paste" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 11h6M9 15h4"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+      <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/></symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+      <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14z"/><path d="M5 19 13 11"/></symbol>
     </defs>
   </svg>
 
@@ -245,7 +251,7 @@
         <section class="stats-strip">
           <div class="stat">
             <div class="stat-icon" style="--c:var(--accent)"><svg class="i"><use href="#i-flame"/></svg></div>
-            <div><div class="label">Streak</div><div class="stat-value"><span id="streak-count">0</span><small> days</small></div></div>
+            <div><div class="label">Streak</div><div class="stat-value"><span id="streak-count">0</span><small> days</small></div><div class="stat-note" id="streak-grace" hidden></div></div>
           </div>
           <div class="stat">
             <svg class="ring" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="18" class="ring-track"/><circle cx="22" cy="22" r="18" class="ring-fill" id="progress-ring"/></svg>
@@ -263,14 +269,15 @@
             <div class="card-head">
               <div><h2>Today's focus</h2><p class="subtitle">What are you showing up for?</p></div>
               <div class="card-actions">
-                <label class="btn btn-ghost btn-sm" for="schedule-image-input" title="Import tasks from a photo or screenshot of a schedule"><svg class="i"><use href="#i-scan"/></svg><span>Scan schedule</span></label>
+                <label class="btn btn-ghost btn-sm" for="schedule-image-input" title="Import tasks from a photo or screenshot of a schedule"><svg class="i"><use href="#i-scan"/></svg><span>Scan</span></label>
                 <input id="schedule-image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+                <button class="btn btn-ghost btn-sm" id="import-text-btn" type="button" title="Paste a syllabus, class list or meeting notes as text"><svg class="i"><use href="#i-paste"/></svg><span>Paste</span></button>
                 <button class="btn btn-ghost btn-sm" id="ai-suggest-btn" type="button"><svg class="i"><use href="#i-sparkle"/></svg><span id="ai-suggest-label">Suggest</span></button>
               </div>
             </div>
 
             <div class="composer">
-              <input type="text" id="task-input" maxlength="200" enterkeyhint="done" placeholder="Add a task… try “gym at 6pm”" autocomplete="off" aria-label="New task">
+              <input type="text" id="task-input" maxlength="200" enterkeyhint="done" placeholder="Add a task… try “gym with Aryan at 6pm for 45 min”" autocomplete="off" aria-label="New task">
               <button id="add-btn" class="btn btn-primary" type="button" aria-label="Add task"><svg class="i"><use href="#i-plus"/></svg><span>Add</span></button>
             </div>
             <div class="chips" id="category-chips" role="radiogroup" aria-label="Category">
@@ -287,7 +294,7 @@
             <div class="empty-state" id="empty-state">
               <svg viewBox="0 0 120 60" class="empty-art" aria-hidden="true"><path d="M10 55a50 50 0 0 1 100 0" fill="none" stroke="currentColor" stroke-dasharray="3 6"/><circle cx="60" cy="55" r="7" fill="var(--accent)"/></svg>
               <p><strong>A blank horizon.</strong></p>
-              <p class="subtitle">Add a task, press <kbd>N</kbd>, or scan a schedule to begin.</p>
+              <p class="subtitle">Add a task, press <kbd>N</kbd>, paste a schedule, or drop a screenshot anywhere.</p>
             </div>
           </section>
 
@@ -305,6 +312,7 @@
       <main class="view" id="view-focus">
         <header class="page-head">
           <div><p class="eyebrow">Deep work</p><h1 class="page-title">Focus session</h1></div>
+          <button class="btn btn-ghost btn-sm zen-only" id="zen-exit" type="button"><svg class="i"><use href="#i-x"/></svg><span>Exit full screen</span><kbd>Esc</kbd></button>
         </header>
         <div class="focus-grid">
           <section class="card focus-card">
@@ -341,6 +349,18 @@
               <button class="btn btn-primary btn-lg" id="focus-start" type="button"><svg class="i"><use href="#i-play"/></svg><span>Start timer</span></button>
               <label class="toggle"><input type="checkbox" id="focus-complete-toggle" checked><span>Mark task done when finished</span></label>
             </div>
+            <div class="shield" aria-label="Distraction shield">
+              <div class="shield-row">
+                <span class="label"><svg class="i"><use href="#i-wave"/></svg> Ambient</span>
+                <div class="seg-group" role="group" aria-label="Ambient sound">
+                  <button class="seg sm" type="button" data-ambient="off" aria-pressed="true">Off</button>
+                  <button class="seg sm" type="button" data-ambient="rain">Rain</button>
+                  <button class="seg sm" type="button" data-ambient="brown">Brown noise</button>
+                  <button class="seg sm" type="button" data-ambient="wind">Wind</button>
+                </div>
+              </div>
+              <button class="btn btn-ghost btn-sm" id="zen-toggle" type="button" title="Hide everything except the timer"><svg class="i"><use href="#i-expand"/></svg><span>Full-screen focus</span></button>
+            </div>
             </div>
             <div id="stopwatch-panel" class="clock-panel" hidden>
               <p class="clock-note">Count up, with no time limit.</p>
@@ -350,15 +370,16 @@
                 <button class="btn btn-ghost" id="stopwatch-secondary" type="button" disabled>Reset</button>
                 <button class="btn btn-primary" id="stopwatch-start" type="button">Start</button>
               </div>
-              <p class="clock-note">Stopwatch laps are temporary and aren't added to focus sessions. Keep this page open.</p>
+              <p class="clock-note">Reset after a run of a minute or more and it's saved as a session. Laps are temporary; keep this page open.</p>
               <ol class="stopwatch-laps" id="stopwatch-laps" aria-label="Stopwatch laps"></ol>
             </div>
           </section>
           <section class="card">
-            <div class="card-head"><div><h2>Today's sessions</h2><p class="subtitle">Saved in this browser</p></div></div>
+            <div class="card-head"><div><h2>Today's sessions</h2><p class="subtitle">Synced to your account, with a note after each one</p></div></div>
             <ul class="session-list" id="session-list"></ul>
             <div class="empty-state small" id="session-empty"><p class="subtitle">No sessions yet. Your first one is the hardest.</p></div>
             <div class="focus-total"><span class="label">Total today</span><span class="mono" id="focus-total">0 min</span></div>
+            <div class="focus-total"><span class="label">Last 7 days</span><span class="mono" id="focus-week">0 min</span></div>
           </section>
         </div>
       </main>
@@ -403,6 +424,8 @@
           <div class="stat"><div><div class="label">Completion rate</div><div class="stat-value" id="summary-rate">0%</div><div class="stat-sub">Done vs planned</div></div></div>
           <div class="stat"><div><div class="label">Avg energy</div><div class="stat-value" id="summary-energy">—</div><div class="stat-sub">1–10 scale</div></div></div>
           <div class="stat"><div><div class="label">Longest streak</div><div class="stat-value" id="summary-streak">0</div><div class="stat-sub">Days in a row</div></div></div>
+          <div class="stat"><div><div class="label">Focused time</div><div class="stat-value" id="summary-focus">0 min</div><div class="stat-sub">Timer and stopwatch</div></div></div>
+          <div class="stat"><div><div class="label">Grace days</div><div class="stat-value" id="summary-grace">0</div><div class="stat-sub">Streak saved by showing up</div></div></div>
         </section>
 
         <section class="card heatmap-card">
@@ -429,6 +452,8 @@
           <div class="card chart-card"><div class="card-head"><div><h3>Daily completion</h3><p class="subtitle">Tasks completed per day</p></div></div><div class="chart-wrap"><canvas id="chart-completion"></canvas></div></div>
           <div class="card chart-card"><div class="card-head"><div><h3>Category mix</h3><p class="subtitle">Where your wins came from</p></div></div><div class="chart-wrap"><canvas id="chart-category"></canvas></div></div>
           <div class="card chart-card chart-wide"><div class="card-head"><div><h3>Energy &amp; focus</h3><p class="subtitle">How you felt each day</p></div></div><div class="chart-wrap"><canvas id="chart-energy"></canvas></div></div>
+          <div class="card chart-card"><div class="card-head"><div><h3>Energy by task type</h3><p class="subtitle">Average energy on days each category led</p></div></div><div class="chart-wrap"><canvas id="chart-energy-cat"></canvas></div></div>
+          <div class="card chart-card"><div class="card-head"><div><h3>Follow-through by hour</h3><p class="subtitle" id="chart-hours-note">When planned blocks actually happen</p></div></div><div class="chart-wrap"><canvas id="chart-hours"></canvas></div></div>
         </div>
         <div class="analytics-empty empty-state" id="analytics-empty"><p><strong>Your patterns will show up here.</strong></p><p class="subtitle">Complete tasks and save reflections to build history.</p></div>
       </main>
@@ -473,11 +498,15 @@
   <div class="modal-backdrop" id="import-modal">
     <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="import-title">
       <div class="modal-head">
-        <div><p class="eyebrow">Schedule import</p><h2 id="import-title" class="modal-title">Review what AI found</h2></div>
+        <div><p class="eyebrow">Schedule import</p><h2 id="import-title" class="modal-title">Review what was found</h2></div>
         <button class="icon-btn" id="import-close" type="button" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
       <div class="import-body">
-        <div class="import-preview"><img id="import-img" alt="Preview of the schedule image you uploaded" decoding="async"></div>
+        <div class="import-preview" id="import-preview-image"><img id="import-img" alt="Preview of the schedule image you uploaded" decoding="async"></div>
+        <div class="import-preview import-text-wrap" id="import-preview-text" hidden>
+          <textarea id="import-text" rows="12" maxlength="6000" spellcheck="false" placeholder="Mon/Wed 9:00-10:15 CS 1570 lecture&#10;Tue 2pm Discrete math recitation (50 min)&#10;Team sync at 4:30pm for 30 minutes&#10;Gym 6pm"></textarea>
+          <button class="btn btn-primary btn-sm" id="import-parse" type="button">Read text</button>
+        </div>
         <div class="import-list-wrap">
           <p class="subtitle" id="import-message">Scanning…</p>
           <ul class="import-list" id="import-list"></ul>
@@ -493,19 +522,34 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="journal-modal">
+    <div class="modal modal-sm" role="dialog" aria-modal="true" aria-labelledby="journal-title">
+      <div class="modal-head">
+        <div><p class="eyebrow">Session journal</p><h2 id="journal-title" class="modal-title">What's on your mind?</h2><p class="subtitle" id="journal-label"></p></div>
+      </div>
+      <div class="reflect-field"><label for="journal-note">Thoughts, blockers, next step <span class="subtitle">(optional)</span></label><textarea id="journal-note" rows="3" maxlength="1000" placeholder="Got stuck on the parser; next time start with the tests."></textarea></div>
+      <div class="modal-foot-actions">
+        <button class="btn btn-ghost" id="journal-skip" type="button">Skip</button>
+        <button class="btn btn-primary" id="journal-save" type="button">Save note</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="whatsnew-modal">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="wn-title">
       <div class="modal-head">
-        <div data-edit-region="whats-new-head" data-edit-label="What's new · heading"><p class="eyebrow">Visionary 4.1</p><h2 id="wn-title" class="modal-title">Safer, faster, yours</h2></div>
+        <div data-edit-region="whats-new-head" data-edit-label="What's new · heading"><p class="eyebrow">Visionary 5.0</p><h2 id="wn-title" class="modal-title">Your day, down to the minute</h2></div>
         <button class="icon-btn" id="whatsnew-close" type="button" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
       <ul class="wn-list" data-edit-region="whats-new-list" data-edit-label="What's new · list">
-        <li><svg class="i"><use href="#i-user"/></svg><div><strong>Account center</strong><p>Change your password, sign out other devices, download your data, or delete your account — all in one place.</p></div></li>
-        <li><svg class="i"><use href="#i-shield"/></svg><div><strong>Stronger sign-in</strong><p>Password reset, clearer errors, protection against repeated guesses, and your data locked to your account on the server.</p></div></li>
-        <li><svg class="i"><use href="#i-bolt"/></svg><div><strong>Faster everywhere</strong><p>Fonts and libraries now load from Visionary itself, and charts load only when you open Patterns.</p></div></li>
-        <li><svg class="i"><use href="#i-today"/></svg><div><strong>Day horizon</strong><p>Your day as an arc — the sun tracks the time and your scheduled tasks sit along it.</p></div></li>
-        <li><svg class="i"><use href="#i-timer"/></svg><div><strong>Focus sessions</strong><p>A built-in timer that can check a task off the moment you finish.</p></div></li>
-        <li><svg class="i"><use href="#i-command"/></svg><div><strong>Quick actions</strong><p>Press <kbd>Ctrl</kbd> <kbd>K</kbd> for everything. Type “gym at 6pm” and the time is set for you.</p></div></li>
+        <li><svg class="i"><use href="#i-command"/></svg><div><strong>Say it, it's scheduled</strong><p>“Gym with Aryan at 6pm for 45 min” or “deep work from 9 to 11” becomes a block on your horizon, people and length included.</p></div></li>
+        <li><svg class="i"><use href="#i-clock"/></svg><div><strong>Find me time</strong><p>Ask “find 30 minutes next Tuesday after discrete math” and pick from the best free slots, ranked by your strong hours.</p></div></li>
+        <li><svg class="i"><use href="#i-paste"/></svg><div><strong>Paste or drop a schedule</strong><p>Syllabus text, a class list, or a screenshot dropped anywhere on the page turns into blocks with times and lengths. Overlaps get resolved.</p></div></li>
+        <li><svg class="i"><use href="#i-steps"/></svg><div><strong>Five-minute steps</strong><p>Too big to start? Break any task into tiny steps. Finish them all and the parent checks itself off.</p></div></li>
+        <li><svg class="i"><use href="#i-flame"/></svg><div><strong>Momentum grace</strong><p>A chaotic day no longer breaks your streak: a 30-second reflection or one finished task keeps it alive.</p></div></li>
+        <li><svg class="i"><use href="#i-wave"/></svg><div><strong>Distraction shield</strong><p>Rain, brown noise or wind generated on-device, full-screen focus, and a quick journal after every session.</p></div></li>
+        <li><svg class="i"><use href="#i-link"/></svg><div><strong>Booking link</strong><p>Share a private link that shows only your free slots — never your task titles — and accept requests with a click.</p></div></li>
+        <li><svg class="i"><use href="#i-chart"/></svg><div><strong>New patterns</strong><p>Energy by task type, follow-through by hour, focused time, and quiet nudges when the data shows something worth knowing.</p></div></li>
       </ul>
       <button class="btn btn-primary btn-block" id="whatsnew-ok" type="button">Let's go</button>
     </div>
@@ -549,10 +593,22 @@
           <div class="acct-actions"><button class="btn btn-ghost btn-sm" id="account-export-btn" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg><span>Download my data</span></button>
           <button class="btn btn-ghost btn-sm" type="button" data-cookie-settings>Cookie settings</button></div>
         </section>
+        <section class="acct-section" id="account-assistant">
+          <h3>Assistant</h3>
+          <div class="acct-toggles">
+            <label class="toggle"><input type="checkbox" data-setting="autoBuffers" checked><span>Smart buffers — add a short travel or recovery gap when a deep-work block and a meeting or workout sit next to each other</span></label>
+            <label class="toggle"><input type="checkbox" data-setting="nudges" checked><span>Quiet nudges — at most one per hour, only when your own data shows a pattern</span></label>
+          </div>
+        </section>
+        <section class="acct-section" id="account-booking">
+          <h3>Booking link</h3>
+          <p class="subtitle">A private page that shows only your free slots, never your task titles or notes. Requests land here for you to accept or decline.</p>
+          <div class="acct-actions"><button class="btn btn-primary btn-sm" id="booking-open" type="button"><svg class="i" aria-hidden="true"><use href="#i-link"/></svg><span>Manage booking link</span></button></div>
+        </section>
         <section class="acct-section" id="account-studio" hidden>
           <h3>Site editor</h3>
           <p class="subtitle" id="account-studio-text">You're a site admin. Edit the landing page, What's new, Privacy Policy, Terms and more, right on the page.</p>
-          <div class="acct-actions"><a class="btn btn-primary btn-sm" href="/studio">Open Studio</a><a class="btn btn-ghost btn-sm" href="/?edit">Edit landing page</a></div>
+          <div class="acct-actions"><a class="btn btn-primary btn-sm" href="/studio">Open Studio</a><a class="btn btn-ghost btn-sm" href="/?edit">Edit landing page</a><a class="btn btn-ghost btn-sm" href="/studio-notes">Engineering notes</a></div>
         </section>
         <section class="acct-section acct-danger" id="account-danger">
           <h3>Delete account</h3>
@@ -562,6 +618,16 @@
           <button class="btn btn-danger" id="account-delete-btn" type="button" disabled>Delete my account</button>
         </section>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="booking-modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="booking-title">
+      <div class="modal-head">
+        <div><p class="eyebrow">Scheduling</p><h2 id="booking-title" class="modal-title">Your booking link</h2><p class="subtitle">Visitors see free slots only. Titles, notes and people stay private.</p></div>
+        <button class="icon-btn modal-close" type="button" data-close aria-label="Close"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="modal-body" id="booking-body"></div>
     </div>
   </div>
 
@@ -582,9 +648,14 @@
   <script src="/js/env.js" defer></script>
   <script src="/js/config.js" defer></script>
   <script src="/js/auth.js" defer></script>
+  <script src="/js/parse.js" defer></script>
+  <script src="/js/scheduler.js" defer></script>
+  <script src="/js/momentum.js" defer></script>
+  <script src="/js/shield.js" defer></script>
   <script src="/js/app.js" defer></script>
   <script src="/js/stopwatch.js" defer></script>
   <script src="/js/account.js" defer></script>
+  <script src="/js/booking.js" defer></script>
   <script src="/js/consent.js" defer></script>
   <script src="/js/site-content.js" defer></script>
 </body>

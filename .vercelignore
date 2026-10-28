@@ -5,3 +5,5 @@ scripts/
 *.md
 .env*
 .git*
+tools/
+jsconfig.json

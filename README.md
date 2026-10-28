@@ -1,13 +1,17 @@
 # Visionary
 
-A calm daily planner: a live day timeline, focus sessions, 30-second reflections and an AI coach.
+A routine and focus ecosystem: a living day horizon with minute-precise blocks, natural-language scheduling and a booking agent, five-minute micro-steps with streak grace, deep-work sessions with a distraction shield, 30-second reflections and pattern analytics.
 
-**Stack:** static HTML/CSS/JS on Vercel · Supabase (Postgres, Auth, Edge Functions) · Anthropic Claude for AI features.
+**Stack:** static HTML/CSS/JS (`// @ts-check` + JSDoc) on Vercel · Supabase (Postgres with RLS, Auth, Edge Functions) · Anthropic Claude for AI features, with local fallbacks for every mode.
+
+Full engineering notes (every release, schema, decisions, operations): [docs/ENGINEERING_NOTES.md](docs/ENGINEERING_NOTES.md), also rendered at `/studio-notes` for admins.
 
 ## Project structure
 
 ```
 index.html              App (sign-in + planner)
+book.html               Public booking page (/book?u=slug)
+studio-notes.html       Engineering notes for admins (built from docs/)
 privacy.html            Privacy Policy
 terms.html              Terms of Service
 404.html                Custom not-found page
@@ -17,7 +21,13 @@ js/
   theme-init.js         Applies theme before first paint
   config.js             Public client config (no secrets)
   auth.js               Sign-in, sign-up, reset, lockout, validation
-  app.js                Planner, focus timer, patterns, AI, demo mode
+  parse.js              Natural-language command + schedule-text parser
+  scheduler.js          Free-slot search, ranking, smart buffers
+  momentum.js           Streak grace, nudges, local micro-steps
+  shield.js             Ambient audio (Web Audio) + full-screen focus
+  app.js                Planner, horizon, focus, patterns, AI, demo mode
+  stopwatch.js          Independent stopwatch
+  booking.js / book.js  Booking links (owner side / public page)
   account.js            Password change, sessions, export, delete account
   consent.js            Cookie banner + consent-gated analytics
   env.js                Public settings shared by every page
@@ -27,18 +37,20 @@ vendor/                 Pinned, self-hosted supabase-js and Chart.js
 assets/                 Icons, fonts, social preview image
 supabase/
   functions/_shared/    Origin allowlist, size limits, auth, security logging
-  functions/ai-suggest/ AI suggestions, insights, schedule scanning
+  functions/ai-suggest/ AI suggestions, insights, schedule scan/text, micro-steps
   functions/account/    Account deletion
   migrations/           RLS, grants, sanitisation, AI quotas, security log
+tools/                  Page builders (studio, notes, book, legal) + local server
 vercel.json             Security headers, caching, clean URLs, redirects
 SECURITY.md             Security model + required dashboard settings
+docs/ENGINEERING_NOTES.md  Everything built, decided and left to do
 docs/payments.md        Rules for adding payments later
 ```
 
 ## Run locally
 
 ```bash
-python3 -m http.server 8000   # open http://localhost:8000/
+python3 tools/serve.py        # open http://localhost:8000/ (clean URLs like /book and /studio work)
 ```
 
 Use **Explore the demo** on the sign-in screen to try everything without an account.
@@ -58,6 +70,16 @@ Sign in with an admin account, open **Account → Open Studio** (or go to `/stud
 2. Run the SQL migration and deploy the edge functions — see [SECURITY.md](SECURITY.md).
 
 ## Release notes
+
+### 5.0 — Visionary OS
+- Minute-precise blocks with length and people; the horizon draws duration arcs; drag to the timeline snaps to 5 minutes.
+- Quick actions understand "gym with Aryan at 6pm for 45 min", "deep work from 9 to 11", and "find 30 minutes next Tuesday after discrete math".
+- Paste a syllabus or drop a screenshot anywhere to import a schedule; overlaps are resolved.
+- Micro-steps (AI or local), Momentum Grace for streaks, quiet data-backed nudges, smart buffers.
+- Focus sessions synced to the cloud, session journal, ambient rain/brown/wind, full-screen focus; stopwatch runs are saved.
+- Private booking links (`/book?u=…`) that show free slots only; accept requests onto your horizon.
+- New Patterns charts: energy by task type, follow-through by hour, focused time, grace days.
+- Database: `supabase/migrations/20261027000000_visionary_os.sql` (additive). Edge function: new `schedule-text` and `breakdown` modes.
 
 ### Phone-style clocks
 - Timer: choose hours, minutes and seconds, from 00:00:01 to 99:59:59.
